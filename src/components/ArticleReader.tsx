@@ -14,17 +14,22 @@ import {
   RotateCcw,
   Send,
   Upload,
+  MoreHorizontal,
+  ChevronDown,
+  Link as LinkIcon,
 } from "lucide-react";
 import type { Attachment, Comment, Page, PageVersion, Space } from "../types";
 import { service } from "../services/sharepointService";
 import Markdown, { extractHeadings, type Heading } from "./Markdown";
 import Modal from "./Modal";
+import { contentText, toMarkdown } from "../lib/content";
 
 type Props = {
   page: Page;
   spaces: Space[];
   pages: Page[];
   onNavigate: (id: number) => void;
+  onSpace?: (id: number) => void;
   onEdit: () => void;
   onChanged: (page: Page) => void;
   onToast: (message: string) => void;
@@ -71,6 +76,7 @@ export default function ArticleReader({
   spaces,
   pages,
   onNavigate,
+  onSpace,
   onEdit,
   onChanged,
   onToast,
@@ -84,9 +90,19 @@ export default function ArticleReader({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [activeHeading, setActiveHeading] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const articleContent = useRef<HTMLDivElement>(null);
+  const actionMenu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (!actionMenu.current?.contains(event.target as Node))
+        actionMenu.current?.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
   const [headings, setHeadings] = useState<Heading[]>(() =>
     extractHeadings(page.Content),
   );
@@ -122,7 +138,7 @@ export default function ArticleReader({
   );
   const readingMinutes = Math.max(
     1,
-    Math.ceil(page.Content.trim().split(/\s+/).length / 220),
+    Math.ceil(contentText(page.Content).split(/\s+/).length / 220),
   );
   useEffect(() => {
     let active = true;
@@ -143,6 +159,7 @@ export default function ArticleReader({
         if (active) {
           setComments(c);
           setAttachments(a);
+          setAttachmentsOpen(a.length > 0);
           setVersions(v);
         }
       })
@@ -190,9 +207,12 @@ export default function ArticleReader({
     }
   }
   function exportMarkdown() {
-    const blob = new Blob([`# ${page.Title}\n\n${page.Content}\n`], {
-      type: "text/markdown;charset=utf-8",
-    });
+    const blob = new Blob(
+      [`# ${page.Title}\n\n${toMarkdown(page.Content)}\n`],
+      {
+        type: "text/markdown;charset=utf-8",
+      },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -204,10 +224,8 @@ export default function ArticleReader({
     try {
       const url = safeAttachment(attachment.ServerRelativeUrl);
       if (!url) throw new Error("Unsupported image URL.");
-      await navigator.clipboard.writeText(
-        `![${attachment.FileName.replace(/[\[\]]/g, "")}](<${url.replace(/>/g, "%3E")}>)`,
-      );
-      onToast("Image Markdown copied. Paste it in the editor.");
+      await navigator.clipboard.writeText(url);
+      onToast("Image link copied. Use Insert image in the editor to add it.");
     } catch {
       onToast(
         "Could not copy automatically. Open the attachment and copy its URL.",
@@ -217,7 +235,13 @@ export default function ArticleReader({
   return (
     <article className="article-view">
       <nav className="breadcrumbs" aria-label="Breadcrumb">
-        <span>{space?.Title || "Space"}</span>
+        {space && onSpace ? (
+          <button type="button" onClick={() => onSpace(space.Id)}>
+            {space.Title}
+          </button>
+        ) : (
+          <span>{space?.Title || "Space"}</span>
+        )}
         {ancestors.map((parent) => (
           <span key={parent.Id}>
             <ChevronRight size={13} />
@@ -230,55 +254,20 @@ export default function ArticleReader({
         <span aria-current="page">{page.Title}</span>
       </nav>
       <header className="article-header">
-        <div className="article-overline">
-          <span className={`status-badge status-${page.Status.toLowerCase()}`}>
-            {page.Status}
-          </span>
-          <span className="eyebrow">
-            {page.TemplateType === "sop"
-              ? "STANDARD OPERATING PROCEDURE"
-              : "KNOWLEDGE ARTICLE"}
-          </span>
-        </div>
-        <h1>{page.Title}</h1>
-        {page.Summary && <p className="article-summary">{page.Summary}</p>}
-        <div className="article-metadata">
-          <span className="avatar">
-            {page.AuthorName.split(" ")
-              .map((n) => n[0])
-              .slice(0, 2)
-              .join("")}
-          </span>
-          <span>
-            By <strong>{page.AuthorName}</strong>
-            <small>
-              Edited by {page.LastEditorName} ·{" "}
-              <time dateTime={page.Modified} title={date(page.Modified)}>
-                {relative(page.Modified)}
-              </time>
-            </small>
-          </span>
-          <span>
-            <Clock3 size={14} />
-            {readingMinutes} min read
-          </span>
-          <button
-            type="button"
-            className="version-badge"
-            onClick={() => setHistoryOpen(true)}
-          >
-            v{page.VersionCount}
-          </button>
-        </div>
-        <div className="article-controls">
-          <div className="tag-row">
-            {page.Tags.map((tag) => (
-              <span className="tag" key={tag}>
-                #{tag}
-              </span>
-            ))}
+        <div className="article-topline">
+          <div className="article-overline">
+            <span
+              className={`status-badge status-${page.Status.toLowerCase()}`}
+            >
+              {page.Status}
+            </span>
+            <span className="article-kind">
+              {page.TemplateType === "sop"
+                ? "Operating procedure"
+                : "Knowledge article"}
+            </span>
           </div>
-          <div className="button-row">
+          <div className="reader-actions">
             <button
               type="button"
               className={`icon-button ${page.IsPinned ? "active" : ""}`}
@@ -302,39 +291,113 @@ export default function ArticleReader({
             >
               <Pin size={17} />
             </button>
-            <button
-              type="button"
-              className="icon-button"
-              title="Version history"
-              aria-label="Version history"
-              onClick={() => setHistoryOpen(true)}
+            <details
+              ref={actionMenu}
+              className="reader-menu"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.currentTarget.removeAttribute("open");
+                  event.currentTarget.querySelector("summary")?.focus();
+                }
+              }}
             >
-              <History size={17} />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              title="Download Markdown"
-              aria-label="Download Markdown"
-              onClick={exportMarkdown}
-            >
-              <Download size={17} />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              title="Print or save PDF"
-              aria-label="Print or save PDF"
-              onClick={() => window.print()}
-            >
-              <Printer size={17} />
-            </button>
+              <summary
+                aria-label="More page actions"
+                title="More page actions"
+                className="icon-button"
+              >
+                <MoreHorizontal size={20} />
+              </summary>
+              <div
+                className="reader-menu-items"
+                role="group"
+                aria-label="Page actions"
+                onClick={(event) => {
+                  const details = event.currentTarget.closest("details");
+                  details?.removeAttribute("open");
+                  details?.querySelector("summary")?.focus();
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryOpen(true);
+                    setPreview(versions[0] || null);
+                  }}
+                >
+                  <History size={16} />
+                  Version history
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(location.href);
+                      onToast("Page link copied.");
+                    } catch {
+                      onToast(
+                        "Copy the page address from your browser to share it.",
+                      );
+                    }
+                  }}
+                >
+                  <LinkIcon size={16} />
+                  Copy page link
+                </button>
+                <div className="reader-menu-divider" />
+                <button type="button" onClick={exportMarkdown}>
+                  <Download size={16} />
+                  Download Markdown
+                </button>
+                <button type="button" onClick={() => window.print()}>
+                  <Printer size={16} />
+                  Print or save PDF
+                </button>
+              </div>
+            </details>
             <button type="button" className="button primary" onClick={onEdit}>
               <Edit3 size={15} />
               Edit page
             </button>
           </div>
         </div>
+        <h1>{page.Title}</h1>
+        {page.Summary && <p className="article-summary">{page.Summary}</p>}
+        <div className="article-metadata">
+          <span className="avatar">
+            {page.AuthorName.split(" ")
+              .map((n) => n[0])
+              .slice(0, 2)
+              .join("")}
+          </span>
+          <span>
+            By <strong>{page.AuthorName}</strong>
+            <small>
+              {page.LastEditorName === page.AuthorName
+                ? "Updated "
+                : `Edited by ${page.LastEditorName} · `}
+              <time dateTime={page.Modified} title={date(page.Modified)}>
+                {relative(page.Modified)}
+              </time>
+            </small>
+          </span>
+          <span>
+            <Clock3 size={14} />
+            {readingMinutes} min read
+          </span>
+          <span className="version-badge" title="Revision number">
+            Version {page.VersionCount}
+          </span>
+        </div>
+        {page.Tags.length > 0 && (
+          <div className="tag-row article-tag-row">
+            {page.Tags.map((tag) => (
+              <span className="tag" key={tag}>
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
       </header>
       {error && (
         <div className="error-banner" role="alert">
@@ -367,10 +430,16 @@ export default function ArticleReader({
           )}
           <section className="attachments-section">
             <div className="section-heading">
-              <h2>
-                <Paperclip size={19} />
+              <button
+                type="button"
+                className="attachment-disclosure"
+                aria-expanded={attachmentsOpen}
+                onClick={() => setAttachmentsOpen(!attachmentsOpen)}
+              >
+                <Paperclip size={17} />
                 Attachments <span className="count">{attachments.length}</span>
-              </h2>
+                <ChevronDown size={15} />
+              </button>
               <button
                 type="button"
                 className="button small"
@@ -393,6 +462,7 @@ export default function ArticleReader({
                     for (const file of files) {
                       await service.uploadAttachment(page.Id, file);
                       setAttachments(await service.getAttachments(page.Id));
+                      setAttachmentsOpen(true);
                     }
                     onToast(
                       `${files.length} attachment${files.length === 1 ? "" : "s"} uploaded.`,
@@ -402,70 +472,68 @@ export default function ArticleReader({
                 }}
               />
             </div>
-            {loading ? (
-              <p className="muted">Loading attachments…</p>
-            ) : attachments.length ? (
-              <div className="attachment-grid">
-                {attachments.map((attachment) => (
-                  <div className="attachment-card" key={attachment.FileName}>
-                    {isImage(attachment) &&
-                    safeAttachment(attachment.ServerRelativeUrl) ? (
+            {attachmentsOpen &&
+              (loading ? (
+                <p className="muted">Loading attachments…</p>
+              ) : attachments.length ? (
+                <div className="attachment-grid">
+                  {attachments.map((attachment) => (
+                    <div className="attachment-card" key={attachment.FileName}>
+                      {isImage(attachment) &&
+                      safeAttachment(attachment.ServerRelativeUrl) ? (
+                        <a
+                          href={safeAttachment(attachment.ServerRelativeUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={safeAttachment(attachment.ServerRelativeUrl)}
+                            alt={attachment.FileName}
+                            loading="lazy"
+                          />
+                        </a>
+                      ) : (
+                        <File size={24} />
+                      )}
                       <a
                         href={safeAttachment(attachment.ServerRelativeUrl)}
+                        download={attachment.FileName}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <img
-                          src={safeAttachment(attachment.ServerRelativeUrl)}
-                          alt={attachment.FileName}
-                          loading="lazy"
-                        />
+                        {attachment.FileName}
+                        <Download size={13} />
                       </a>
-                    ) : (
-                      <File size={24} />
-                    )}
-                    <a
-                      href={safeAttachment(attachment.ServerRelativeUrl)}
-                      download={attachment.FileName}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {attachment.FileName}
-                      <Download size={13} />
-                    </a>
-                    {attachment.Size != null && (
-                      <small className="muted">
-                        {Math.ceil(attachment.Size / 1024)} KB
-                      </small>
-                    )}
-                    {isImage(attachment) && (
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => copyImage(attachment)}
-                      >
-                        <Link2 size={12} />
-                        Copy image Markdown
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="empty-inline">
-                Add reference files, diagrams, or supporting images to this
-                page.
-              </p>
-            )}
+                      {attachment.Size != null && (
+                        <small className="muted">
+                          {Math.ceil(attachment.Size / 1024)} KB
+                        </small>
+                      )}
+                      {isImage(attachment) && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => copyImage(attachment)}
+                        >
+                          <Link2 size={12} />
+                          Copy image link
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-inline">
+                  Add reference files, diagrams, or supporting images to this
+                  page.
+                </p>
+              ))}
           </section>
           <section className="comments-section">
             <h2>
               <MessageSquare size={19} />
               Discussion <span className="count">{comments.length}</span>
             </h2>
-            <p className="muted">
-              Ask a question or add context for the next person.
-            </p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -523,11 +591,6 @@ export default function ArticleReader({
                   </div>
                 </div>
               ))}
-              {!loading && !comments.length && (
-                <p className="empty-inline">
-                  No comments yet. Start the conversation.
-                </p>
-              )}
             </div>
           </section>
         </div>
@@ -566,14 +629,6 @@ export default function ArticleReader({
           ) : (
             <p className="muted">Headings will appear here.</p>
           )}
-          <div className="toc-footnote">
-            <strong>Knowledge grows together.</strong>
-            <p>
-              Found something outdated?
-              <br />
-              Edit the page or leave a comment.
-            </p>
-          </div>
         </aside>
       </div>
       {historyOpen && (

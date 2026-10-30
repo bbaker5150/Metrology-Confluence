@@ -4,10 +4,18 @@ test("Markdown heading links retain the article route and page links navigate", 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Create page", exact: true }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Page/ }).click();
   await page
     .getByLabel("Title", { exact: true })
     .fill("Article anchor navigation");
+  await page
+    .getByRole("button", { name: "More formatting", exact: true })
+    .click();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Markdown source", exact: true })
+    .click();
   await page
     .getByLabel("Article Markdown")
     .fill(

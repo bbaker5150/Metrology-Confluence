@@ -57,3 +57,10 @@ export interface SetupCheck {
   exists: boolean;
   missingFields: string[];
 }
+
+/** Images selected in the editor; these are uploaded only when the page is saved. */
+export interface PendingImage {
+  id: string;
+  file: File;
+  previewUrl: string;
+}

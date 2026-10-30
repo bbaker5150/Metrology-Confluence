@@ -77,10 +77,12 @@ async function openSharePointHost(page: BrowserPage, denyCreate = false) {
     return json({ error: { message: "Unexpected endpoint" } }, 500);
   });
   await page.goto(appUrl);
-  await expect(page.locator(".profile")).toContainText("SharePoint Editor");
+  await expect(page.locator(".account-summary")).toContainText(
+    "SharePoint Editor",
+  );
   await expect(
     page.getByRole("heading", {
-      name: "Good work starts with shared knowledge.",
+      name: "Knowledge home",
     }),
   ).toBeVisible();
   return { spaces, creates, unexpected, digestRequests: () => digestRequests };
@@ -102,7 +104,8 @@ test("creates the first SharePoint space from an ASP.NET-hosted app without subm
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await expect(page.locator("#root button:not([type])")).toHaveCount(0);
-  await page.getByRole("button", { name: "New space", exact: true }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Space/ }).click();
   await expectNoHostSubmit(page);
   const dialog = page.getByRole("dialog", { name: "Create a space" });
   await expect(dialog).toBeVisible();
@@ -143,7 +146,8 @@ test("SharePoint create errors remain visible and entered values survive a faile
   page,
 }) => {
   const fixture = await openSharePointHost(page, true);
-  await page.getByRole("button", { name: "Create space", exact: true }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Space/ }).click();
   await expectNoHostSubmit(page);
   const dialog = page.getByRole("dialog", { name: "Create a space" });
   await dialog.getByLabel("Space name", { exact: true }).fill("Engineering");

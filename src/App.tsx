@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Search,
@@ -14,23 +14,37 @@ import {
   Moon,
   Sun,
   ArrowUpRight,
-  Layers3,
   Menu,
   X,
   FolderOpen,
-  Command,
   CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 import { service } from "./services/sharepointService";
+import { savePageWithImages } from "./services/imageSave";
+import { contentText } from "./lib/content";
 import type { Space, Page } from "./types";
+import emblem from "./assets/metsoft-emblem.webp";
 import Modal from "./components/Modal";
 import Editor from "./components/Editor";
 import ArticleReader from "./components/ArticleReader";
 
 type View = "home" | "space" | "pinned" | "recent" | "drafts" | "tag";
 const relative = (date: string) => {
-  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
-  return days <= 0 ? "Today" : days === 1 ? "Yesterday" : `${days} days ago`;
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(date).getTime()) / 86400000),
+  );
+  return days === 0
+    ? "Today"
+    : days === 1
+      ? "Yesterday"
+      : days < 30
+        ? `${days} days ago`
+        : new Date(date).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
 };
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>;
@@ -45,7 +59,6 @@ function Highlight({ text, query }: { text: string; query: string }) {
     </>
   );
 }
-
 export default function App() {
   const [spaces, setSpaces] = useState<Space[]>([]),
     [pages, setPages] = useState<Page[]>([]),
@@ -54,7 +67,7 @@ export default function App() {
     [error, setError] = useState("");
   const [view, setView] = useState<View>("home"),
     [spaceId, setSpaceId] = useState<number>(),
-    [pageId, setPageId] = useState<number>(
+    [pageId, setPageId] = useState(
       () =>
         Number(new URLSearchParams(location.hash.slice(1)).get("page")) || 0,
     ),
@@ -64,10 +77,17 @@ export default function App() {
     [admin, setAdmin] = useState(false),
     [newSpace, setNewSpace] = useState(false),
     [mobile, setMobile] = useState(false),
-    [toast, setToast] = useState("");
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("mc-theme") || "light",
-  );
+    [toast, setToast] = useState(""),
+    [expandedSpaces, setExpandedSpaces] = useState<number[]>([]),
+    [createOpen, setCreateOpen] = useState(false);
+  const createRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("mc-theme") || "light";
+    } catch {
+      return "light";
+    }
+  });
   const notify = useCallback((message: string) => setToast(message), []);
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -92,7 +112,11 @@ export default function App() {
   }, [refresh]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("mc-theme", theme);
+    try {
+      localStorage.setItem("mc-theme", theme);
+    } catch {
+      /* Theme remains usable if browser storage is blocked. */
+    }
   }, [theme]);
   useEffect(() => {
     if (!toast) return;
@@ -100,15 +124,15 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (!editor) setSearch((v) => !v);
+        if (!editor && !admin && !newSpace) setSearch((v) => !v);
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [editor]);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [editor, admin, newSpace]);
   useEffect(() => {
     const h = () =>
       setPageId(
@@ -117,12 +141,20 @@ export default function App() {
     window.addEventListener("hashchange", h);
     return () => window.removeEventListener("hashchange", h);
   }, []);
+  useEffect(() => {
+    if (!createOpen) return;
+    const h = (e: PointerEvent) => {
+      if (!createRef.current?.contains(e.target as Node)) setCreateOpen(false);
+    };
+    document.addEventListener("pointerdown", h);
+    return () => document.removeEventListener("pointerdown", h);
+  }, [createOpen]);
   const navigate = (id: number) => {
     setPageId(id);
     location.hash = `page=${id}`;
     setSearch(false);
     setMobile(false);
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0 });
   };
   const go = (next: View, id?: number) => {
     setView(next);
@@ -130,8 +162,10 @@ export default function App() {
     setPageId(0);
     history.replaceState(null, "", location.pathname + location.search);
     setMobile(false);
+    window.scrollTo({ top: 0 });
   };
   const create = (parent?: Page) => {
+    setCreateOpen(false);
     if (!spaces.length) {
       setNewSpace(true);
       return;
@@ -146,14 +180,15 @@ export default function App() {
     });
   };
   const changed = (p: Page) =>
-    setPages((previous) =>
-      previous.some((x) => x.Id === p.Id)
-        ? previous.map((x) => (x.Id === p.Id ? p : x))
-        : [p, ...previous],
+    setPages((v) =>
+      v.some((x) => x.Id === p.Id)
+        ? v.map((x) => (x.Id === p.Id ? p : x))
+        : [p, ...v],
     );
   const page = pages.find((p) => p.Id === pageId),
-    space = spaces.find((s) => s.Id === spaceId);
-  const live = pages.filter((p) => p.Status !== "Archived");
+    space = spaces.find((s) => s.Id === (page?.SpaceId || spaceId));
+  const live = pages.filter((p) => p.Status !== "Archived"),
+    pinned = live.filter((p) => p.IsPinned);
   const tags = Array.from(new Set(live.flatMap((p) => p.Tags))).sort();
   const visible = live
     .filter((p) =>
@@ -168,135 +203,201 @@ export default function App() {
               : true,
     )
     .sort((a, b) => b.Modified.localeCompare(a.Modified));
+  const title =
+    view === "home"
+      ? "Knowledge home"
+      : view === "space"
+        ? space?.Title
+        : view === "pinned"
+          ? "Pinned pages"
+          : view === "recent"
+            ? "Recently updated"
+            : view === "drafts"
+              ? "My drafts"
+              : `#${tag}`;
   const navItems = [
-    { key: "home" as View, label: "All spaces", icon: Home },
-    { key: "pinned" as View, label: "Pinned pages", icon: Pin },
+    { key: "home" as View, label: "Home", icon: Home },
     { key: "recent" as View, label: "Recently updated", icon: Clock3 },
+    { key: "pinned" as View, label: "Pinned pages", icon: Pin },
     { key: "drafts" as View, label: "My drafts", icon: FileEdit },
   ];
+  const totalDrafts = live.filter(
+    (p) => p.Status === "Draft" && p.AuthorName === user,
+  ).length;
+  const list = (items: Page[]) => (
+    <div className="document-list">
+      {items.map((p) => (
+        <button
+          type="button"
+          className="document-row"
+          key={p.Id}
+          onClick={() => navigate(p.Id)}
+        >
+          <span className="document-glyph">
+            <FileText size={19} />
+          </span>
+          <span className="document-details">
+            <strong>{p.Title}</strong>
+            <small>
+              {spaces.find((s) => s.Id === p.SpaceId)?.Title}
+              <span>·</span>
+              {p.LastEditorName}
+            </small>
+          </span>
+          <span className={`status-badge status-${p.Status.toLowerCase()}`}>
+            {p.Status}
+          </span>
+          <time dateTime={p.Modified}>{relative(p.Modified)}</time>
+          <ChevronRight size={15} />
+        </button>
+      ))}
+    </div>
+  );
   return (
-    <div className="app-shell">
+    <div className="workspace-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       {mobile && (
         <div className="sidebar-scrim" onClick={() => setMobile(false)} />
       )}
       <aside
-        className={`sidebar ${mobile ? "open" : ""}`}
+        className={`workspace-sidebar ${mobile ? "open" : ""}`}
         aria-label="Main navigation"
       >
         <a
-          className="brand"
+          className="suite-brand"
           href="#"
           onClick={(e) => {
             e.preventDefault();
             go("home");
           }}
         >
-          <span className="brand-icon">
-            <BookOpen size={23} />
-          </span>
+          <img
+            src={emblem}
+            alt="Metrology Software emblem"
+            width="45"
+            height="45"
+          />
           <span>
-            METROLOGY
-            <strong>
-              Confluence<span className="brand-dot">.</span>
-            </strong>
+            <small>METROLOGY SOFTWARE</small>
+            <strong>Confluence</strong>
           </span>
         </a>
-        <div className="sidebar-caption">TEAM KNOWLEDGE</div>
-        <nav>
+        <nav className="workspace-nav">
           {navItems.map(({ key, label, icon: Icon }) => (
             <button
               type="button"
               key={key}
-              className={`nav-item ${view === key && !pageId ? "active" : ""}`}
+              className={`workspace-nav-item ${view === key && !pageId ? "active" : ""}`}
               onClick={() => go(key)}
+              aria-current={view === key && !pageId ? "page" : undefined}
             >
-              <Icon size={17} />
-              {label}
-              {key === "drafts" && (
-                <span className="nav-count">
-                  {
-                    live.filter(
-                      (p) => p.Status === "Draft" && p.AuthorName === user,
-                    ).length
-                  }
-                </span>
+              <Icon size={18} />
+              <span>{label}</span>
+              {key === "drafts" && totalDrafts > 0 && (
+                <span className="nav-number">{totalDrafts}</span>
               )}
             </button>
           ))}
         </nav>
-        <div className="sidebar-caption caption-with-action">
-          SPACES
+        <div className="sidebar-section-label">
+          Spaces<span>{spaces.length}</span>
+        </div>
+        <div className="workspace-spaces">
+          {spaces.map((s) => {
+            const expanded =
+              expandedSpaces.includes(s.Id) || page?.SpaceId === s.Id;
+            return (
+              <div className="sidebar-space" key={s.Id}>
+                <div
+                  className={`sidebar-space-heading ${view === "space" && spaceId === s.Id && !pageId ? "active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="space-expand"
+                    aria-label={`${expanded ? "Collapse" : "Expand"} ${s.Title}`}
+                    aria-expanded={expanded}
+                    onClick={() => {
+                      if (page?.SpaceId === s.Id) {
+                        go("space", s.Id);
+                      }
+                      setExpandedSpaces((v) =>
+                        expanded ? v.filter((id) => id !== s.Id) : [...v, s.Id],
+                      );
+                    }}
+                  >
+                    {expanded ? (
+                      <ChevronDown size={14} />
+                    ) : (
+                      <ChevronRight size={14} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="space-nav-title"
+                    onClick={() => {
+                      go("space", s.Id);
+                      setExpandedSpaces((v) =>
+                        v.includes(s.Id) ? v : [...v, s.Id],
+                      );
+                    }}
+                  >
+                    <span
+                      className="space-dot"
+                      style={{ background: s.AccentColor }}
+                    />
+                    {s.Title}
+                  </button>
+                </div>
+                {expanded && (
+                  <PageTree
+                    pages={live.filter((p) => p.SpaceId === s.Id)}
+                    selected={pageId}
+                    onNavigate={navigate}
+                    onCreate={create}
+                  />
+                )}
+              </div>
+            );
+          })}
+          {!spaces.length && !loading && (
+            <p className="sidebar-empty">Your spaces will appear here.</p>
+          )}
+        </div>
+        <div className="workspace-account">
           <button
             type="button"
-            aria-label="Create space"
-            onClick={() => setNewSpace(true)}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-        <div className="space-navigation">
-          {spaces.map((s) => (
-            <div key={s.Id}>
-              <button
-                type="button"
-                className={`nav-item ${spaceId === s.Id && view === "space" && !pageId ? "active" : ""}`}
-                onClick={() => go("space", s.Id)}
-              >
-                <span
-                  className="space-dot"
-                  style={{ background: s.AccentColor }}
-                />
-                {s.Title}
-                <ChevronRight size={13} className="push-right" />
-              </button>
-              {(spaceId === s.Id || page?.SpaceId === s.Id) && (
-                <PageTree
-                  pages={live.filter((p) => p.SpaceId === s.Id)}
-                  selected={pageId}
-                  onNavigate={navigate}
-                  onCreate={create}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="sidebar-bottom">
-          <div className="suite-label">
-            <Layers3 size={17} />
-            <span>
-              Metrology software suite<small>One place for what we know.</small>
-            </span>
-          </div>
-          <button
-            type="button"
-            className="nav-item"
+            className="workspace-settings"
             onClick={() => setAdmin(true)}
           >
             <Settings size={17} />
-            Admin / Setup
+            Workspace settings
           </button>
-          <div className="profile">
+          <div className="account-summary">
             <span className="avatar">
-              {(user || "Local User")
+              {(user || "Knowledge Hub")
                 .split(" ")
                 .slice(0, 2)
                 .map((n) => n[0])
                 .join("")}
             </span>
-            <div>
-              {user || "Knowledge hub"}
+            <span>
+              <strong>{user || "Knowledge hub"}</strong>
               <small>
+                <span
+                  className={`connection-dot ${service.mode === "local" ? "demo" : ""}`}
+                />
                 {service.mode === "local"
-                  ? "Local demo workspace"
-                  : "SharePoint workspace"}
+                  ? "Local demo"
+                  : "Connected to SharePoint"}
               </small>
-            </div>
-            <span className="online-dot" />
+            </span>
           </div>
         </div>
       </aside>
-      <div className="main-shell">
-        <header className="topbar">
+      <div className="workspace-main">
+        <header className="workspace-topbar">
           <button
             type="button"
             className="icon-button mobile-menu"
@@ -305,60 +406,129 @@ export default function App() {
           >
             <Menu size={21} />
           </button>
-          <div className="topbar-title">
-            <BookOpen size={16} />
+          <div className="workspace-location">
+            <BookOpen size={17} />
             <span>Knowledge hub</span>
-            <ChevronRight size={14} />
-            <strong>
-              {page
-                ? "Article"
-                : space && view === "space"
-                  ? space.Title
-                  : "Overview"}
-            </strong>
           </div>
-          <div className="topbar-actions">
+          <div className="workspace-toolbar">
             <button
               type="button"
-              className="search-trigger"
+              className="global-search"
               onClick={() => setSearch(true)}
+              aria-label="Search knowledge"
             >
-              <Search size={16} />
-              <span>Search knowledge…</span>
-              <kbd>⌘ K</kbd>
+              <Search size={17} />
+              <span>Search anything</span>
+              <kbd>
+                {/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"}
+              </kbd>
             </button>
             <button
               type="button"
-              className="icon-button"
+              className="icon-button theme-button"
               aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
               onClick={() => setTheme(theme === "light" ? "dark" : "light")}
             >
               {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => create()}
-              disabled={loading}
+            <div
+              className="create-control"
+              ref={createRef}
+              onKeyDown={(e) => {
+                const actions = Array.from(
+                  createRef.current?.querySelectorAll<HTMLButtonElement>(
+                    '[role="menuitem"]:not(:disabled)',
+                  ) || [],
+                );
+                if (e.key === "Escape") {
+                  setCreateOpen(false);
+                  createRef.current
+                    ?.querySelector<HTMLButtonElement>(".create-trigger")
+                    ?.focus();
+                }
+                if (
+                  (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+                  createOpen
+                ) {
+                  e.preventDefault();
+                  const at = actions.indexOf(
+                    document.activeElement as HTMLButtonElement,
+                  );
+                  actions[
+                    (at +
+                      (e.key === "ArrowDown" ? 1 : actions.length - 1) +
+                      actions.length) %
+                      actions.length
+                  ]?.focus();
+                }
+              }}
             >
-              <Plus size={16} />
-              Create page
-            </button>
+              <button
+                type="button"
+                className="button primary create-trigger"
+                aria-haspopup="menu"
+                aria-expanded={createOpen}
+                onClick={() => setCreateOpen((v) => !v)}
+                disabled={loading}
+              >
+                <Plus size={17} />
+                Create
+                <ChevronDown size={13} />
+              </button>
+              {createOpen && (
+                <div
+                  className="create-dropdown"
+                  role="menu"
+                  aria-label="Create content"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!spaces.length}
+                    onClick={() => create()}
+                  >
+                    <FileText size={19} />
+                    <span>
+                      <strong>Page</strong>
+                      <small>
+                        {spaces.length
+                          ? "Capture and share knowledge"
+                          : "Create a space first"}
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateOpen(false);
+                      setNewSpace(true);
+                    }}
+                  >
+                    <FolderOpen size={19} />
+                    <span>
+                      <strong>Space</strong>
+                      <small>A home for a team or topic</small>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
-        <main id="main-content" className="main-content">
+        <main id="main-content" className="workspace-content" tabIndex={-1}>
           {service.mode === "local" && (
-            <div className="mode-banner">
-              <span className="demo-dot" />
-              Local demo · Changes are saved in this browser.
-              <button type="button" onClick={() => setAdmin(true)}>
-                Connect to SharePoint <ArrowUpRight size={13} />
-              </button>
+            <div className="demo-notice">
+              <span className="connection-dot demo" />
+              Demo workspace
+              <span className="demo-explanation">
+                Your changes stay in this browser.
+              </span>
             </div>
           )}
           {error ? (
-            <div className="error-panel" role="alert">
-              <h2>Couldn’t load this workspace</h2>
+            <section className="error-panel" role="alert">
+              <h2>We couldn’t open this workspace</h2>
               <p>{error}</p>
               <div className="button-row">
                 <button
@@ -366,21 +536,21 @@ export default function App() {
                   className="button"
                   onClick={() => void refresh()}
                 >
-                  Retry
+                  Try again
                 </button>
                 <button
                   type="button"
                   className="button primary"
                   onClick={() => setAdmin(true)}
                 >
-                  Open setup
+                  Workspace settings
                 </button>
               </div>
-            </div>
+            </section>
           ) : loading ? (
-            <div className="empty-state">
-              <BookOpen className="loading-icon" />
-              <h2>Opening your knowledge hub…</h2>
+            <div className="loading-workspace">
+              <img src={emblem} alt="" width="64" height="64" />
+              <p>Opening your workspace…</p>
             </div>
           ) : page ? (
             <ArticleReader
@@ -389,290 +559,238 @@ export default function App() {
               pages={pages}
               spaces={spaces}
               onNavigate={navigate}
+              onSpace={(id) => go("space", id)}
               onEdit={() => setEditor(page)}
               onChanged={changed}
               onToast={notify}
             />
           ) : pageId ? (
             <div className="empty-state">
-              <h2>Page not found</h2>
-              <p>This page may have moved or you may not have access.</p>
+              <FileText size={30} />
+              <h2>This page isn’t available</h2>
+              <p>It may have moved, or you may not have access.</p>
               <button
                 type="button"
                 className="button"
                 onClick={() => go("home")}
               >
-                Back to all spaces
+                Back to home
               </button>
             </div>
           ) : (
             <>
-              <section className="page-heading">
-                <div>
-                  <div className="eyebrow">
-                    {view === "home"
-                      ? "THE SHARED SOURCE OF KNOWLEDGE"
-                      : view === "space"
-                        ? "WORKSPACE"
-                        : "YOUR KNOWLEDGE LIBRARY"}
-                  </div>
-                  <h1>
-                    {view === "home"
-                      ? "Good work starts with shared knowledge."
-                      : view === "space"
-                        ? space?.Title
-                        : view === "pinned"
-                          ? "Pinned pages"
-                          : view === "recent"
-                            ? "Recently updated"
-                            : view === "drafts"
-                              ? "My drafts"
-                              : `Topic: ${tag}`}
-                  </h1>
-                  <p>
-                    {view === "home"
-                      ? "Find an answer. Document a process. Move the whole team forward."
-                      : view === "space"
-                        ? space?.Description
-                        : "Keep the information you need close at hand."}
-                  </p>
+              <header className="workspace-page-heading">
+                <div className="heading-context">
+                  {view === "home"
+                    ? "YOUR SHARED WORKSPACE"
+                    : view === "space"
+                      ? "SPACE"
+                      : "LIBRARY"}
                 </div>
-                {view !== "home" && (
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => create()}
-                  >
-                    <Plus size={16} />
-                    New page
-                  </button>
-                )}
-              </section>
+                <div className="heading-title-row">
+                  <h1>{title}</h1>
+                  <span className="content-count">
+                    {view === "home"
+                      ? `${spaces.length} spaces · ${live.length} pages`
+                      : `${visible.length} ${visible.length === 1 ? "page" : "pages"}`}
+                  </span>
+                </div>
+                <p>
+                  {view === "home"
+                    ? "A home for the knowledge that moves your team forward."
+                    : view === "space"
+                      ? space?.Description
+                      : view === "drafts"
+                        ? "Pick up where you left off. Your unpublished work lives here."
+                        : view === "pinned"
+                          ? "The references your team wants to keep close."
+                          : view === "recent"
+                            ? "Follow what’s new and what’s changed."
+                            : "Explore related guidance, decisions, and procedures."}
+                </p>
+              </header>
               {view === "home" && (
                 <>
-                  <div className="stats-row">
-                    <div>
-                      <span className="stat-icon blue">
-                        <FileText size={19} />
-                      </span>
-                      <strong>
-                        {live.length}
-                        <small>Knowledge pages</small>
-                      </strong>
+                  {!spaces.length ? (
+                    <div className="first-workspace">
+                      <img src={emblem} alt="" width="84" height="84" />
+                      <h2>Good knowledge needs a home.</h2>
+                      <p>
+                        Start with a space for your team, then add your first
+                        procedure, guide, or project page.
+                      </p>
+                      <div className="onboarding-steps">
+                        <span>
+                          <b>1</b>Choose <strong>Create → Space</strong>
+                        </span>
+                        <span>
+                          <b>2</b>Add a page
+                        </span>
+                        <span>
+                          <b>3</b>Share what you know
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="stat-icon mint">
-                        <FolderOpen size={19} />
-                      </span>
-                      <strong>
-                        {spaces.length}
-                        <small>Connected spaces</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="stat-icon amber">
-                        <Pin size={19} />
-                      </span>
-                      <strong>
-                        {live.filter((p) => p.IsPinned).length}
-                        <small>Pinned essentials</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="stat-icon violet">
-                        <CheckCircle2 size={19} />
-                      </span>
-                      <strong>
-                        {live.filter((p) => p.Status === "Published").length}
-                        <small>Published articles</small>
-                      </strong>
-                    </div>
-                  </div>
-                  <section>
-                    <SectionHeading
-                      eyebrow="START HERE"
-                      title="Pinned & essential"
-                      action="View all pinned"
-                      onClick={() => go("pinned")}
-                    />
-                    <div className="featured-grid">
-                      {live
-                        .filter((p) => p.IsPinned)
-                        .slice(0, 3)
-                        .map((p, i) => (
+                  ) : (
+                    <section className="space-directory">
+                      <div className="workspace-section-heading">
+                        <h2>Your spaces</h2>
+                        <span>Organized around the way you work</span>
+                      </div>
+                      <div className="workspace-space-grid">
+                        {spaces.map((s) => (
                           <button
                             type="button"
-                            className={`featured-card feature-${i}`}
-                            key={p.Id}
-                            onClick={() => navigate(p.Id)}
+                            className="workspace-space-card"
+                            key={s.Id}
+                            onClick={() => {
+                              go("space", s.Id);
+                              setExpandedSpaces((v) =>
+                                v.includes(s.Id) ? v : [...v, s.Id],
+                              );
+                            }}
                           >
-                            <div className="card-kicker">
+                            <span
+                              className="space-card-icon"
+                              style={{ color: s.AccentColor }}
+                            >
+                              <FolderOpen size={24} />
+                            </span>
+                            <h3>{s.Title}</h3>
+                            <p>{s.Description}</p>
+                            <div>
                               <span>
-                                <Pin size={13} />
-                                PINNED RESOURCE
+                                {live.filter((p) => p.SpaceId === s.Id).length}{" "}
+                                {live.filter((p) => p.SpaceId === s.Id)
+                                  .length === 1
+                                  ? "page"
+                                  : "pages"}
                               </span>
-                              <ArrowUpRight size={18} />
-                            </div>
-                            <div className="featured-icon">
-                              <BookOpen size={24} />
-                            </div>
-                            <h3>{p.Title}</h3>
-                            <p>{p.Summary}</p>
-                            <div className="card-footer">
-                              <span>
-                                {spaces.find((s) => s.Id === p.SpaceId)?.Title}
-                              </span>
-                              <ChevronRight size={16} />
+                              <ArrowRight size={16} />
                             </div>
                           </button>
                         ))}
-                      {!live.some((p) => p.IsPinned) && (
-                        <div className="empty-card">
-                          Pin useful articles to feature them here.
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                  <section>
-                    <SectionHeading
-                      eyebrow="EXPLORE TOGETHER"
-                      title="Your spaces"
-                      action="New space"
-                      onClick={() => setNewSpace(true)}
-                    />
-                    <div className="space-grid">
-                      {spaces.map((s) => (
-                        <button
-                          type="button"
-                          className="space-card"
-                          key={s.Id}
-                          onClick={() => go("space", s.Id)}
-                        >
-                          <span
-                            className="space-symbol"
-                            style={{ color: s.AccentColor }}
+                      </div>
+                    </section>
+                  )}
+                  {pinned.length > 0 && (
+                    <section className="pinned-section">
+                      <div className="workspace-section-heading">
+                        <h2>
+                          <Pin size={16} />
+                          Pinned for the team
+                        </h2>
+                        <span>Start with the essentials</span>
+                      </div>
+                      <div className="workspace-pinned-grid">
+                        {pinned.slice(0, 3).map((p) => (
+                          <button
+                            type="button"
+                            className="workspace-pinned-card"
+                            key={p.Id}
+                            onClick={() => navigate(p.Id)}
                           >
-                            <FolderOpen size={22} />
-                          </span>
-                          <ArrowUpRight className="space-arrow" size={17} />
-                          <h3>{s.Title}</h3>
-                          <p>{s.Description}</p>
-                          <div className="space-meta">
-                            <span>
-                              {live.filter((p) => p.SpaceId === s.Id).length}{" "}
-                              pages
+                            <span className="pinned-space">
+                              <span
+                                className="space-dot"
+                                style={{
+                                  background: spaces.find(
+                                    (s) => s.Id === p.SpaceId,
+                                  )?.AccentColor,
+                                }}
+                              />
+                              {spaces.find((s) => s.Id === p.SpaceId)?.Title}
                             </span>
-                            <span>
-                              {live
-                                .filter((p) => p.SpaceId === s.Id)
-                                .sort((a, b) =>
-                                  b.Modified.localeCompare(a.Modified),
-                                )[0]?.Modified
-                                ? `Updated ${relative(live.filter((p) => p.SpaceId === s.Id).sort((a, b) => b.Modified.localeCompare(a.Modified))[0].Modified).toLowerCase()}`
-                                : "Ready for your first page"}
+                            <h3>{p.Title}</h3>
+                            <p>{p.Summary}</p>
+                            <span className="pinned-footer">
+                              <FileText size={14} />
+                              {Math.max(
+                                1,
+                                Math.ceil(
+                                  contentText(p.Content).split(/\s+/).length /
+                                    220,
+                                ),
+                              )}{" "}
+                              min read
+                              <ArrowUpRight size={15} />
                             </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                 </>
               )}
-              <div className="discovery-grid">
-                <section className="recent-panel">
-                  <SectionHeading
-                    eyebrow={
-                      view === "home"
-                        ? "STAY IN THE LOOP"
-                        : "BROWSE THE LIBRARY"
-                    }
-                    title={view === "home" ? "Recently updated" : "Pages"}
-                    action={view === "home" ? "View all activity" : undefined}
-                    onClick={() => go("recent")}
-                  />
-                  <div className="page-list">
-                    {visible
-                      .slice(0, view === "home" ? 6 : undefined)
-                      .map((p) => (
-                        <button
-                          type="button"
-                          key={p.Id}
-                          className="page-row"
-                          onClick={() => navigate(p.Id)}
-                        >
-                          <span className="document-icon">
-                            <FileText size={19} />
-                          </span>
-                          <div className="page-row-main">
-                            <strong>{p.Title}</strong>
-                            <span>
-                              {spaces.find((s) => s.Id === p.SpaceId)?.Title}
-                              <i>·</i>
-                              {p.LastEditorName}
-                            </span>
-                          </div>
-                          <span className={`badge ${p.Status.toLowerCase()}`}>
-                            {p.Status}
-                          </span>
-                          <time>{relative(p.Modified)}</time>
-                          <ChevronRight size={15} />
-                        </button>
-                      ))}
-                    {!visible.length && (
-                      <div className="empty-state">
-                        <FileText size={26} />
-                        <h3>No pages here yet</h3>
-                        <p>Create a page to start sharing knowledge.</p>
-                        <button
-                          type="button"
-                          className="button primary"
-                          onClick={() => create()}
-                        >
-                          Create page
-                        </button>
+              {(spaces.length > 0 || view !== "home") && (
+                <div
+                  className={`workspace-library ${tags.length ? "with-topics" : ""}`}
+                >
+                  <section className="activity-section">
+                    <div className="workspace-section-heading">
+                      <h2>
+                        {view === "home"
+                          ? "Recently updated"
+                          : view === "space"
+                            ? "Pages in this space"
+                            : "Pages"}
+                      </h2>
+                      {view === "home" && (
+                        <span>The latest from across your spaces</span>
+                      )}
+                    </div>
+                    {visible.length ? (
+                      list(visible.slice(0, view === "home" ? 6 : undefined))
+                    ) : (
+                      <div className="library-empty">
+                        <FileText size={30} />
+                        <h3>
+                          {view === "drafts"
+                            ? "You’re all caught up."
+                            : "Nothing here yet."}
+                        </h3>
+                        <p>
+                          {view === "drafts"
+                            ? "Drafts appear here when you save a page without publishing."
+                            : "Use Create → Page to add knowledge to this space."}
+                        </p>
                       </div>
                     )}
-                  </div>
-                </section>
-                <aside className="topics-panel">
-                  <div className="eyebrow">FIND YOUR TOPIC</div>
-                  <h2>Browse by tag</h2>
-                  <p>A shorter path to the right answer.</p>
-                  <div className="tag-cloud">
-                    {tags.map((t) => (
-                      <button
-                        type="button"
-                        className={`tag ${tag === t && view === "tag" ? "selected" : ""}`}
-                        key={t}
-                        onClick={() => {
-                          setTag(t);
-                          go("tag");
-                        }}
-                      >
-                        #{t}
-                        <span>
-                          {live.filter((p) => p.Tags.includes(t)).length}
-                        </span>
-                      </button>
-                    ))}
-                    {!tags.length && <p>Add tags to your first article.</p>}
-                  </div>
-                  <div className="knowledge-tip">
-                    <span className="tip-icon">✦</span>
-                    <h3>Make the next question easier.</h3>
-                    <p>Turn a solved problem into a page your team can find.</p>
-                    <button type="button" onClick={() => create()}>
-                      Share what you know <ArrowUpRight size={15} />
-                    </button>
-                  </div>
-                </aside>
-              </div>
+                  </section>
+                  {tags.length > 0 && (
+                    <aside className="topic-directory">
+                      <div className="workspace-section-heading">
+                        <h2>Explore topics</h2>
+                      </div>
+                      <p>Follow a thread of knowledge.</p>
+                      <div className="workspace-tag-list">
+                        {tags.slice(0, 24).map((t) => (
+                          <button
+                            type="button"
+                            className={`topic-chip ${view === "tag" && tag === t ? "active" : ""}`}
+                            key={t}
+                            onClick={() => {
+                              setTag(t);
+                              go("tag");
+                            }}
+                          >
+                            #{t}
+                            <span>
+                              {live.filter((p) => p.Tags.includes(t)).length}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </aside>
+                  )}
+                </div>
+              )}
             </>
           )}
         </main>
-        <footer className="app-footer">
-          <span>METROLOGY CONFLUENCE</span>
-          <span>Built for clarity. Shared for progress.</span>
+        <footer className="workspace-footer">
+          <span>Metrology Software</span>
+          <span>Knowledge is better when it’s shared.</span>
         </footer>
       </div>
       {search && (
@@ -688,9 +806,12 @@ export default function App() {
           page={editor}
           spaces={spaces}
           pages={pages}
-          onCancel={() => setEditor(null)}
-          onSave={async (p, note) => {
-            const saved = await service.savePage(p, note);
+          onCancel={() => {
+            setEditor(null);
+            void refresh();
+          }}
+          onSave={async (p, note, images) => {
+            const saved = await savePageWithImages(p, note, images || []);
             changed(saved);
             setEditor(null);
             navigate(saved.Id);
@@ -717,6 +838,7 @@ export default function App() {
             setSpaces((v) => [...v, s]);
             setNewSpace(false);
             go("space", s.Id);
+            setExpandedSpaces((v) => [...v, s.Id]);
             notify("Space created.");
           }}
         />
@@ -724,7 +846,7 @@ export default function App() {
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={18} />
-          {toast}
+          <span>{toast}</span>
           <button
             type="button"
             onClick={() => setToast("")}
@@ -733,32 +855,6 @@ export default function App() {
             <X size={16} />
           </button>
         </div>
-      )}
-    </div>
-  );
-}
-function SectionHeading({
-  eyebrow,
-  title,
-  action,
-  onClick,
-}: {
-  eyebrow: string;
-  title: string;
-  action?: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="section-heading">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h2>{title}</h2>
-      </div>
-      {action && (
-        <button type="button" className="text-button" onClick={onClick}>
-          {action}
-          <ArrowUpRight size={15} />
-        </button>
       )}
     </div>
   );
@@ -845,6 +941,10 @@ function SearchDialog({
     [tag, setTag] = useState(""),
     [after, setAfter] = useState(""),
     [selected, setSelected] = useState(0);
+  const searchBodies = useMemo(
+    () => new Map(pages.map((p) => [p.Id, contentText(p.Content)])),
+    [pages],
+  );
   const results = useMemo(
     () =>
       pages
@@ -854,12 +954,12 @@ function SearchDialog({
             (!status || p.Status === status) &&
             (!tag || p.Tags.includes(tag)) &&
             (!after || p.Modified.slice(0, 10) >= after) &&
-            `${p.Title} ${p.Summary} ${p.Content} ${p.Tags.join(" ")} ${p.AuthorName} ${p.LastEditorName}`
+            `${p.Title} ${p.Summary} ${searchBodies.get(p.Id)} ${p.Tags.join(" ")} ${p.AuthorName} ${p.LastEditorName}`
               .toLowerCase()
               .includes(q.toLowerCase()),
         )
         .sort((a, b) => b.Modified.localeCompare(a.Modified)),
-    [pages, q, space, status, tag, after],
+    [pages, searchBodies, q, space, status, tag, after],
   );
   useEffect(() => setSelected(0), [q, space, status, tag, after]);
   useEffect(() => {
@@ -949,10 +1049,7 @@ function SearchDialog({
         </div>
         <div className="search-results" id="search-results">
           {results.map((p, i) => {
-            const body = `${p.Summary || ""} ${p.Content}`.replace(
-              /[#*`>]/g,
-              "",
-            );
+            const body = `${p.Summary || ""} ${searchBodies.get(p.Id) || ""}`;
             const at = body.toLowerCase().indexOf(q.toLowerCase());
             const snippet = body.slice(
               Math.max(0, at - 45),
@@ -1029,7 +1126,7 @@ function SetupDialog({
     void check();
   }, []);
   return (
-    <Modal title="Admin / Setup" onClose={onClose}>
+    <Modal title="Workspace settings" onClose={onClose}>
       <p>
         Four SharePoint lists store your spaces, pages, revision history, and
         discussions. Setup is repeatable and adds only missing lists and
@@ -1076,7 +1173,12 @@ function SetupDialog({
         <button
           type="button"
           className="button primary"
-          disabled={busy || service.mode === "local"}
+          disabled={
+            busy ||
+            service.mode === "local" ||
+            (checks.length > 0 &&
+              checks.every((c) => c.exists && !c.missingFields.length))
+          }
           onClick={async () => {
             setBusy(true);
             setError("");
@@ -1091,48 +1193,56 @@ function SetupDialog({
             }
           }}
         >
-          {busy ? "Checking…" : "Create missing lists & fields"}
+          {busy
+            ? "Checking…"
+            : checks.length > 0 &&
+                checks.every((c) => c.exists && !c.missingFields.length)
+              ? "Setup complete"
+              : "Create missing lists & fields"}
         </button>
       </div>
       <hr />
-      <h3>Standalone SharePoint hosting</h3>
-      <p>
-        If the HTML host does not expose SharePoint context, provide the
-        same-origin site URL explicitly. The app uses your existing SharePoint
-        sign-in.
-      </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          try {
-            const url = new URL(site);
-            if (url.origin !== location.origin)
-              throw new Error(
-                "Open this HTML on the SharePoint origin first. Cross-origin connections are not supported.",
-              );
-            const current = new URL(location.href);
-            current.searchParams.set("siteUrl", url.href);
-            location.assign(current.href);
-          } catch (e) {
-            setError(String(e));
-          }
-        }}
-      >
-        <label>
-          SharePoint site URL
-          <input
-            type="url"
-            required
-            placeholder="https://tenant.sharepoint.com/sites/Metrology"
-            value={site}
-            onChange={(e) => setSite(e.target.value)}
-          />
-        </label>
-        <button className="button" type="submit">
-          Use this site
-        </button>
-      </form>
+      <details className="connection-details">
+        <summary>Connection settings</summary>
+        <h3>SharePoint site</h3>
+        <p>
+          {service.mode === "sharepoint"
+            ? "Your SharePoint site was detected automatically. Leave this empty unless you need to change sites."
+            : "Open this app on your SharePoint site to connect. If automatic detection is unavailable, enter the site’s base URL—not the page or HTML file address."}
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              const url = new URL(site);
+              if (url.origin !== location.origin)
+                throw new Error(
+                  "Open this HTML on the SharePoint origin first. Cross-origin connections are not supported.",
+                );
+              const current = new URL(location.href);
+              current.searchParams.set("siteUrl", url.href);
+              location.assign(current.href);
+            } catch (e) {
+              setError(String(e));
+            }
+          }}
+        >
+          <label>
+            SharePoint site URL
+            <input
+              type="url"
+              required
+              placeholder="https://tenant.sharepoint.com/sites/Metrology"
+              value={site}
+              onChange={(e) => setSite(e.target.value)}
+            />
+          </label>
+          <button className="button" type="submit">
+            Use this site
+          </button>
+        </form>
+      </details>
     </Modal>
   );
 }

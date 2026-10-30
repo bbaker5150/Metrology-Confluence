@@ -8,7 +8,7 @@ Discovery was completed and summarized before application scaffolding. Sources w
 
 ## Visual system
 
-The siblings have related, but not identical, tokens. Metrology-Confluence uses Tracker's shell and exact color tokens as its primary system, with Workbench's readable system sans and monospace fallbacks. No remote font or icon requests are needed.
+The siblings have related, but not identical, tokens. Metrology-Confluence retains Tracker's exact color tokens as its primary system, with Workbench's readable system sans and monospace fallbacks. The revised interface simplifies the shell and action hierarchy rather than copying every original layout dimension. No remote font, logo, or icon requests are needed.
 
 | Token | Light | Dark |
 | --- | --- | --- |
@@ -30,6 +30,26 @@ The siblings have related, but not identical, tokens. Metrology-Confluence uses 
 Tracker uses a 248px navy sidebar, 70px top bar, 28px main padding, 18px card/dialog radii, and 10–11px control radii. Its status pills use tinted backgrounds and rounded edges. Dialogs use a dark, blurred backdrop; toasts sit at bottom right. Source: [`src/styles.css`](https://github.com/bbaker5150/NPSL-Modernization-Tracker/blob/5f06385/src/styles.css).
 
 Workbench uses canvas `#f5f7fb` / `#0b1220`, accent `#2563eb` / `#60a5fa`, and a more compact 40px shell top bar. Its Inter/system UI and monospace conventions inform article readability. Sources: `Frontend/workbench/src/modules/uncertainty/App.css`, `src/app/workbench.css`, and `src/shared/fonts/fonts.css`.
+
+## Shared logo provenance
+
+The interface now uses the suite's actual medallion, copied unchanged from [`Metrology-Software-Homepage/emblem-preview.webp`](https://github.com/bbaker5150/Metrology-Software-Homepage/blob/49fde8b692a4f1080bf9ade2aa3dc74ca8eaa159/emblem-preview.webp) into `src/assets/metsoft-emblem.webp`. The homepage documents its source as Workbench's `Frontend/workbench/src/assets/emblem-preview.webp`. The copied file is byte-identical to the homepage asset, with SHA-256:
+
+```text
+8ca4a45d827c21e7c6f9323e625b8714b43e6f11436f77d7dce054bc353af547
+```
+
+Vite embeds this local image in the final HTML. It is used in the sidebar identity and home/empty-state treatment; the generic book logo has been removed.
+
+## Interface and editor revision
+
+The [Confluence design review](confluence-design-review.md) records the official Atlassian documentation inspected for the second design pass. The resulting application uses one global **Create** menu for **Page** and **Space**, a focused space tree, a quieter home dashboard, and **Workspace settings** for site administration. Article history, copying a link, export, and print are grouped in **More page actions**; Edit and pin remain immediately available.
+
+A visual Tiptap editor replaces the default Markdown split view. It provides text formatting, tables with contextual row/column controls, action lists, callout panels, code blocks with a language selector, links, symbols/emoji, and inline images. Images can come from URLs, existing attachments, file upload, clipboard paste, or drag/drop. Selected images expose description and width controls. A metrology-oriented symbol palette deliberately goes beyond current Confluence Cloud's reliance on operating-system special-character tools.
+
+Existing Markdown pages and snapshots remain readable. Visual-editor saves use a versioned, sanitized HTML envelope in the existing `Content` and `ContentSnapshot` text fields. Markdown export converts that content; switching to source mode is optional and warns about possible formatting simplification. There is no list-schema migration and no automatic rewrite of untouched pages.
+
+The editor shows unsaved status and saves only on an explicit user action. It does not implement real-time multiplayer editing. Image uploads are staged until saving; a new page may need an initial Draft before its images can become SharePoint attachments. Partial failures retain editing context and surface recovery instructions because list writes and attachment uploads are not one transaction.
 
 ## SharePoint conventions
 

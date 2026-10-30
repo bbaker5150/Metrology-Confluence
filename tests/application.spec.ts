@@ -12,17 +12,16 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Good work starts with shared knowledge.",
+      name: "Knowledge home",
     }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Create page", exact: true })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Page/ }).click();
   await page
     .getByLabel("Title", { exact: true })
     .fill("Browser verification procedure");
   await page.getByLabel("Starter template").selectOption("sop");
+  await page.getByRole("button", { name: "Page details", exact: true }).click();
   await page
     .getByLabel("Summary", { exact: true })
     .fill("A saved procedure used to verify the portable build.");
@@ -54,12 +53,20 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
   await expect(page.getByRole("link", { name: "reference.txt" })).toBeVisible();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await page
-    .getByLabel("Article Markdown")
-    .fill("## Updated procedure\n\nThis is a revised article.");
-  await page.getByRole("button", { name: "Publish page" }).click();
+    .getByRole("textbox", { name: "Article content" })
+    .fill("Updated procedure");
+  // Selecting the existing heading style must not turn it back into a paragraph.
+  await page.getByLabel("Text style").selectOption("2");
+  await expect(
+    page
+      .getByRole("textbox", { name: "Article content" })
+      .getByRole("heading", { name: "Updated procedure" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save changes" }).click();
   await expect(
     page.getByRole("heading", { name: "Updated procedure" }),
   ).toBeVisible();
+  await page.getByLabel("More page actions").click();
   await page
     .getByRole("button", { name: "Version history", exact: true })
     .click();
@@ -103,11 +110,16 @@ test("mobile navigation, themes, and safe Markdown", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page
-    .getByRole("button", { name: "Create page", exact: true })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Page/ }).click();
   await page.getByLabel("Title", { exact: true }).fill("Safe Markdown");
+  await page
+    .getByRole("button", { name: "More formatting", exact: true })
+    .click();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Markdown source", exact: true })
+    .click();
   await page
     .getByLabel("Article Markdown")
     .fill(
