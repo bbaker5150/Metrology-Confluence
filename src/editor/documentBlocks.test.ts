@@ -134,4 +134,77 @@ describe("document blocks in the visual editor", () => {
       editor.destroy();
     }
   });
+  it("continues after a selected status on Enter so the next block cannot replace it", () => {
+    const editor = new Editor({
+      extensions,
+      content:
+        '<p><span data-type="status" data-tone="green">Approved</span></p>',
+    });
+    try {
+      editor.commands.setNodeSelection(1);
+      editor.view.dom.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(editor.getHTML()).toBe(
+        '<p><span data-type="status" data-tone="green">Approved</span></p><p></p>',
+      );
+      expect(editor.state.selection.toJSON()).toEqual({
+        type: "text",
+        anchor: 4,
+        head: 4,
+      });
+      editor.commands.insertContentAt(
+        { from: editor.state.selection.from, to: editor.state.selection.to },
+        createExpandSection("Evidence"),
+      );
+      expect(editor.getHTML()).toContain(
+        '<span data-type="status" data-tone="green">Approved</span>',
+      );
+      expect(editor.getHTML()).toContain(
+        '<details data-type="expand"><summary>Evidence</summary>',
+      );
+    } finally {
+      editor.destroy();
+    }
+  });
+  it("retains normal paragraph Enter and intentional selected-status deletion", () => {
+    const editor = new Editor({
+      extensions,
+      content:
+        '<p>First line</p><p><span data-type="status" data-tone="blue">Review</span></p>',
+    });
+    try {
+      editor.commands.setTextSelection(11);
+      editor.view.dom.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(editor.getHTML()).toBe(
+        '<p>First line</p><p></p><p><span data-type="status" data-tone="blue">Review</span></p>',
+      );
+      let statusPosition = -1;
+      editor.state.doc.descendants((node, position) => {
+        if (node.type.name === "status") statusPosition = position;
+      });
+      editor.commands.setNodeSelection(statusPosition);
+      editor.view.dom.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Backspace",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(editor.getHTML()).not.toContain('data-type="status"');
+      expect(editor.getHTML()).toContain("First line");
+    } finally {
+      editor.destroy();
+    }
+  });
 });

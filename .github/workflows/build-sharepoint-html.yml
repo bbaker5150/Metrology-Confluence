@@ -40,6 +40,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Smoke test the bundled application
         run: npm run test:browser
+      - name: Retain browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: browser-failures-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Generate checksum
         run: |
           cd dist

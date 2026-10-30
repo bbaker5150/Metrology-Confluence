@@ -1,5 +1,5 @@
 import { Node as TiptapNode, type JSONContent } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { normalizeStatusLabel, normalizeStatusTone } from "../lib/content";
 import "./documentBlocks.css";
 
@@ -138,6 +138,25 @@ export const InlineStatus = TiptapNode.create({
   inline: true,
   atom: true,
   selectable: true,
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { selection } = this.editor.state;
+        if (
+          !(selection instanceof NodeSelection) ||
+          selection.node.type.name !== this.name
+        )
+          return false;
+        // Keep a selected chip when continuing the document. Splitting with a
+        // NodeSelection would leave it selected for the next insert to replace.
+        return this.editor
+          .chain()
+          .setTextSelection(selection.to)
+          .splitBlock()
+          .run();
+      },
+    };
+  },
   addAttributes() {
     return {
       label: {

@@ -151,12 +151,15 @@ test("expand sections and status labels survive publishing, search, and Markdown
   await page.getByLabel("Status color", { exact: true }).selectOption("green");
   await content.press("Control+End");
   await content.press("Enter");
+  await expect(chip).toHaveAttribute("data-tone", "green");
+  await expect(chip).toHaveText("Approved for trial");
   await page.getByRole("button", { name: "Insert", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Insert content", exact: true })
     .getByRole("button", { name: /^Expand section / })
     .click();
   const section = content.locator('details[data-type="expand"]');
+  await expect(chip).toHaveText("Approved for trial");
   await section.locator(".expand-editor-title").fill("Validation notes");
   await section.locator('div[data-type="expandContent"] p').first().click();
   await page.keyboard.type("Evidence checks");
@@ -234,4 +237,40 @@ test("expand sections and status labels survive publishing, search, and Markdown
   await expect(
     reopened.locator('span[data-type="status"][data-tone="green"]'),
   ).toHaveText("Approved for trial");
+});
+
+test("Enter after a selected status keeps the label and begins a new paragraph", async ({
+  page,
+}) => {
+  const content = await createDraft(page, "Status keyboard continuation");
+  await content.fill("Review status ");
+  await content.press("End");
+  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Insert content", exact: true })
+    .getByRole("button", { name: /^Status / })
+    .click();
+  const chip = content.locator('span[data-type="status"]');
+  await chip.click();
+  await page
+    .getByRole("textbox", { name: "Status label", exact: true })
+    .fill("Ready");
+  await page.getByLabel("Status color", { exact: true }).selectOption("green");
+  // Selecting an atomic status followed by Enter must preserve it even before
+  // the browser delivers a delayed native selectionchange event.
+  await chip.click();
+  await content.press("Enter");
+  await content.pressSequentially("Additional review context.");
+  await expect(chip).toHaveText("Ready");
+  await expect(chip).toHaveAttribute("data-tone", "green");
+  await expect(content.locator("p").last()).toHaveText(
+    "Additional review context.",
+  );
+  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await expect(
+    page.locator(".article-content .document-status.status-green"),
+  ).toHaveText("Ready");
+  await expect(page.locator(".article-content")).toContainText(
+    "Additional review context.",
+  );
 });
