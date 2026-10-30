@@ -1,0 +1,96 @@
+name: Build SharePoint HTML
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sharepoint-html-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate TypeScript
+        run: npm run typecheck
+      - name: Test data and application behavior
+        run: npm test
+      - name: Build portable HTML
+        run: npm run build
+      - name: Verify single self-contained file
+        run: npm run verify
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Smoke test the bundled application
+        run: npm run test:browser
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum index.html > index.html.sha256
+      - name: Upload portable HTML
+        uses: actions/upload-artifact@v5
+        with:
+          name: metrology-confluence-${{ github.sha }}
+          path: |
+            dist/index.html
+            dist/index.html.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: metrology-confluence-${{ github.sha }}
+          path: release
+      - name: Publish or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = 'tag' ]; then
+            RELEASE_TAG="$REF_NAME"
+          else
+            RELEASE_TAG="build-${COMMIT:0:7}"
+          fi
+          cat > release-notes.txt <<EOF_NOTES
+          Portable Metrology-Confluence SharePoint build.
+
+          Commit: $COMMIT
+
+          Download index.html and upload it to your approved SharePoint application host. The companion index.html.sha256 verifies the downloaded file. See the repository README for list provisioning and hosting requirements.
+          EOF_NOTES
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/index.html release/index.html.sha256 --clobber
+            gh release edit "$RELEASE_TAG" --title "Metrology Confluence $RELEASE_TAG" --notes-file release-notes.txt --latest
+          else
+            gh release create "$RELEASE_TAG" release/index.html release/index.html.sha256 --target "$COMMIT" --title "Metrology Confluence $RELEASE_TAG" --notes-file release-notes.txt --latest
+          fi
+          printf 'Download: https://github.com/%s/releases/latest/download/index.html\n' "$GH_REPO" >> "$GITHUB_STEP_SUMMARY"
