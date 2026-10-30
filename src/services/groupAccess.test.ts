@@ -106,13 +106,29 @@ function fixture(ready = false) {
     if (rejectPath && path.includes(rejectPath)) throw denied();
     if (path.includes("/roledefinitions?")) return roles;
     const list = stateFor(path);
+    if (path.endsWith("/roleassignments?$select=PrincipalId")) {
+      const itemId = path.match(/\/items\((\d+)\)/)?.[1];
+      const grants = itemId
+        ? list.items.find((item) => item.Id === +itemId)!.grants
+        : list.grants;
+      return [
+        { PrincipalId: 99 },
+        ...(grants.length ? [{ PrincipalId: 17 }] : []),
+      ];
+    }
     if (path.includes("/roledefinitionbindings?")) {
       expect(path).toContain("getbyprincipalid(17)");
       const itemId = path.match(/\/items\((\d+)\)/)?.[1];
       const grants = itemId
         ? list.items.find((item) => item.Id === +itemId)!.grants
         : list.grants;
-      if (!grants.length) throw missing();
+      if (!grants.length)
+        throw Object.assign(
+          new Error("No role assignment for this principal"),
+          {
+            status: 400,
+          },
+        );
       return grants.map((Id) => ({ Id }));
     }
     if (path.includes("/items?"))
@@ -205,6 +221,27 @@ describe("scoped team access", () => {
     ).rejects.toThrow("verified SharePoint site owner");
     expect(f.get).not.toHaveBeenCalled();
     expect(f.writes).toHaveLength(0);
+  });
+  it("detects an absent group assignment without calling the missing-principal endpoint", async () => {
+    const f = fixture();
+    f.lists.Pages.grants = [];
+    f.lists.Pages.items[0].grants = [];
+    const report = await inspectGroupAccess(f.client);
+    expect(report.canRepair).toBe(true);
+    expect(report.lists.find((list) => list.key === "Pages")).toMatchObject({
+      groupHasContribute: false,
+      uniqueItemsMissingGrant: 1,
+    });
+    expect(
+      f.collection.mock.calls.some(
+        ([path]) =>
+          path.includes("Metrology-Confluence - Pages") &&
+          path.includes("getbyprincipalid"),
+      ),
+    ).toBe(false);
+    expect((await repairGroupAccess(f.client, async () => true)).ready).toBe(
+      true,
+    );
   });
   it("repairs only all four app lists and existing unique items while preserving owners and approval", async () => {
     const f = fixture();

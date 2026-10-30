@@ -167,6 +167,17 @@ async function openWorkspace(
         (candidate) => listSchema[candidate].title === title,
       );
       if (!key) return json({ error: { message: "Unknown list" } }, 404);
+      const roleAssignments = resource.match(
+        /^(\/items\((\d+)\))?\/roleassignments$/,
+      );
+      if (roleAssignments && request.method() === "GET") {
+        const scope = `${key}${roleAssignments[1] || ""}`;
+        return json({
+          value: Array.from(grants.get(scope)?.keys() || []).map(
+            (PrincipalId) => ({ PrincipalId }),
+          ),
+        });
+      }
       const roleBindings = resource.match(
         /^(\/items\((\d+)\))?\/roleassignments\/getbyprincipalid\((\d+)\)\/roledefinitionbindings$/,
       );

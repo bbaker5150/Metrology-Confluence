@@ -132,15 +132,18 @@ async function bindingIds(
   path: string,
   groupId: number,
 ): Promise<number[]> {
-  try {
-    const rows = await client.collection<{ Id: number }>(
-      `${path}/roleassignments/getbyprincipalid(${groupId})/roledefinitionbindings?$select=Id`,
-    );
-    return rows.map((row) => identifier(row.Id));
-  } catch (error) {
-    if (is404(error)) return [];
-    throw error;
-  }
+  // GetByPrincipalId's missing-assignment response is not a reliable 404.
+  // Establish absence from a successful, paginated collection instead of
+  // treating a request error as evidence that the group has no access.
+  const assignments = await client.collection<{ PrincipalId: number }>(
+    `${path}/roleassignments?$select=PrincipalId`,
+  );
+  const principals = assignments.map((row) => identifier(row.PrincipalId));
+  if (!principals.includes(groupId)) return [];
+  const rows = await client.collection<{ Id: number }>(
+    `${path}/roleassignments/getbyprincipalid(${groupId})/roledefinitionbindings?$select=Id`,
+  );
+  return rows.map((row) => identifier(row.Id));
 }
 async function bindings(
   client: SharePointClient,
