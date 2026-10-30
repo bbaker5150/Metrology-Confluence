@@ -84,15 +84,23 @@ export default function App() {
     [createOpen, setCreateOpen] = useState(false);
   const createRef = useRef<HTMLDivElement>(null);
   const editorState = useRef({ dirty: false, busy: false });
+  const discardEditorRecovery = useRef<(() => Promise<void>) | null>(null);
   const editorOpen = useRef(false);
   editorOpen.current = Boolean(editor);
   const currentHash = useRef(location.hash);
   const pendingNavigation = useRef<(() => void) | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardBusy, setDiscardBusy] = useState(false);
   const [editorSession, setEditorSession] = useState(0);
   const reportEditorState = useCallback(
     (state: { dirty: boolean; busy: boolean }) => {
       editorState.current = state;
+    },
+    [],
+  );
+  const registerDiscardRecovery = useCallback(
+    (clear: (() => Promise<void>) | null) => {
+      discardEditorRecovery.current = clear;
     },
     [],
   );
@@ -627,6 +635,8 @@ export default function App() {
               spaces={spaces}
               pages={pages}
               onStateChange={reportEditorState}
+              onDiscardRecoveryChange={registerDiscardRecovery}
+              onRecoveryWarning={notify}
               onCancel={() => transition(() => void refresh())}
               onSave={async (p, note, images) => {
                 const saved = await savePageWithImages(p, note, images || []);
@@ -935,6 +945,7 @@ export default function App() {
         <Modal
           title="Discard unsaved changes?"
           onClose={() => {
+            if (discardBusy) return;
             pendingNavigation.current = null;
             setDiscardOpen(false);
           }}
@@ -947,6 +958,7 @@ export default function App() {
             <button
               type="button"
               className="button"
+              disabled={discardBusy}
               onClick={() => {
                 pendingNavigation.current = null;
                 setDiscardOpen(false);
@@ -957,15 +969,30 @@ export default function App() {
             <button
               type="button"
               className="button danger"
-              onClick={() => {
-                const action = pendingNavigation.current;
-                pendingNavigation.current = null;
-                setDiscardOpen(false);
-                finishEditing();
-                action?.();
+              disabled={discardBusy}
+              onClick={async () => {
+                setDiscardBusy(true);
+                editorState.current.busy = true;
+                try {
+                  await discardEditorRecovery.current?.();
+                  const action = pendingNavigation.current;
+                  pendingNavigation.current = null;
+                  setDiscardOpen(false);
+                  finishEditing();
+                  action?.();
+                } catch (failure) {
+                  editorState.current.busy = false;
+                  notify(
+                    failure instanceof Error
+                      ? failure.message
+                      : "The local recovery copy could not be removed. Your edits are still open.",
+                  );
+                } finally {
+                  setDiscardBusy(false);
+                }
               }}
             >
-              Discard changes
+              {discardBusy ? "Discarding…" : "Discard changes"}
             </button>
           </div>
         </Modal>

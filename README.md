@@ -4,14 +4,16 @@ A lightweight internal knowledge hub for the metrology software suite. React 18,
 
 [Download the latest HTML](https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/index.html) · [Builds](https://github.com/bbaker5150/Metrology-Confluence/actions/workflows/build-sharepoint-html.yml) · [Reference-app discovery](docs/discovery.md) · [Confluence design review](docs/confluence-design-review.md)
 
-Preview the redesigned [home](docs/previews/home-light.webp), [dark theme](docs/previews/home-dark.webp), [visual editor](docs/previews/editor.webp), and [symbol picker](docs/previews/symbols.webp). These captures use seeded demonstration content.
+Preview the [home](docs/previews/home-light.webp), [visual editor](docs/previews/editor.webp), [dark editor](docs/previews/editor-dark.webp), [page preview](docs/previews/page-preview.webp), and [symbol picker](docs/previews/symbols.webp). These captures use demonstration content.
 
 ## Features
 
 - Spaces, nested pages, pinned articles, recent updates, personal drafts, and topic browsing.
 - Global command search (`Ctrl+K` / `Cmd+K`) with space, status, tag, and date filters.
 - Visual Tiptap editor with headings, bold/italic/underline, lists and action lists, links, undo/redo, and five starter templates.
-- An Insert menu and `/` on an empty line for tables, code blocks, callouts, dividers, symbols, emoji, and images. Secondary formatting includes strikethrough, highlighting, inline code, subscript, superscript, and text alignment.
+- An Insert menu and `/` on an empty line for tables, code blocks, callouts, expandable sections, inline status badges, dividers, symbols, emoji, and images. Secondary formatting includes strikethrough, highlighting, inline code, subscript, superscript, and text alignment.
+- Page links selected by title or space, an authoring outline, reader-style preview, and find/replace with case and whole-word controls.
+- Automatic recovery copies in this browser, including staged images, with explicit restore/discard choices. Saving to SharePoint remains manual.
 - Images from upload, paste, drag and drop, a URL, or existing page attachments, with description and width controls. Code blocks have a language selector; the reader adds syntax highlighting and copy controls.
 - Article breadcrumbs, metadata, heading navigation, code copy, attachments, comments, Markdown export, and print/PDF layout.
 - Revision snapshots with preview and restore; a restored revision becomes a new saved version. Creators can delete leaf pages through the app after confirmation.
@@ -26,7 +28,19 @@ Pages open in a reading view with a clear **Edit page** action. **More page acti
 
 The visual editor occupies the main document area, keeping the workspace sidebar available. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
 
+Use **Insert → Expand section** for supporting procedures or background that readers can open when needed. The section has an editable title and rich body; it opens while editing and starts collapsed in the reader. **Insert → Status** adds a short colored label within the article. These labels are separate from the page's Draft/Published status. The link control has **Pages** and **URL** tabs: search accessible pages by title or space, choose a target, and optionally customize the link text.
+
+**Page tools** groups the authoring utilities. **Outline** lists headings and jumps to the selected section. **Preview** shows the current text and staged images without publishing; **Back to writing** returns to the editor. **Find and replace** searches visible document text across formatting marks, with **Match case** and **Whole words** options, previous/next match navigation, and current/all replacement. It does not search link destinations or image attributes. Replacement is undoable; text surrounding a replacement retains its formatting. Outline and find/replace are available in the visual editor.
+
 Use **Save draft**, **Publish page**, or **Save changes** to persist your edits. The footer shows unsaved changes and pending image uploads. There is **no automatic saving to SharePoint and no real-time collaborative editing**. Navigating elsewhere in the app with unsaved changes opens an in-app discard dialog; a browser navigation guard also runs where the host supports it. Sandboxed hosts may suppress the browser's native leave prompt. Replacing existing content with a template and switching to **More formatting → Markdown source** use in-app confirmation dialogs. Source conversion can simplify some visual formatting.
+
+### Local draft recovery
+
+While you write, the app keeps a recovery copy in this browser's IndexedDB, including page details, text, and the original bytes for staged images. **Saved on this device** confirms a completed local write; it does not mean the page has been saved or published to SharePoint. Recovery is best effort: an abrupt close can lose changes made after the last completed local save. Copies are scoped to the connected site and signed-in user, and separate editing sessions keep separate copies.
+
+After a reload, open the same page for editing—or **Create → Page** for an unfinished new page—to see available recovery copies. Choose **Restore draft** or explicitly **Discard saved draft**. Recovery retains the original revision, so newer edits in SharePoint still trigger the normal conflict protection. Interrupted or uncertain saves restore with direct retries blocked; check the latest saved page before attempting another write. Recovery does not merge changes made by different authors. **Page tools → Download recovery copy** also downloads the current Markdown with staged images embedded.
+
+Recovery is limited to the same browser profile and origin; it does not sync between devices. Clearing browser data removes these copies. If storage is blocked or full, the editor reports that recovery is unavailable and ordinary Save/Publish remains available. Save the page or download a copy before closing that tab. A failure to remove a recovery copy is also reported, so a stale copy may remain available even after a successful page save. Shared drafts under **My drafts** are saved page records, separate from these browser recovery copies.
 
 ## Local development
 
@@ -143,7 +157,7 @@ After confirmation, SharePoint pages and their attachments move to the SharePoin
 
 The service handles minimal/verbose OData responses, pagination, digest caching, and descriptive errors. Existing-page saves use the loaded ETag to detect conflicting edits. Reload a stale page before retrying a conflict. SharePoint does not provide one transaction across the Pages and Versions lists; native page history provides additional recovery if a snapshot operation fails. Do not blindly repeat a write after a network interruption: reload first to see whether it completed.
 
-The legacy Markdown reader does not execute raw HTML. Rich content and legacy content imported into the visual editor pass through an allowlist sanitizer that removes scripts, event handlers, unsupported URLs, and unrestricted styling. Markdown export converts visual content into Markdown, preserving common document structures; formatting that Markdown cannot represent may be simplified or represented by limited HTML tags. Export includes image references, not an archive of attached files. Print/PDF uses the browser's print dialog.
+The legacy Markdown reader does not execute raw HTML. Rich content and legacy content imported into the visual editor pass through an allowlist sanitizer that removes scripts, event handlers, unsupported URLs, and unrestricted styling. Expandable sections and inline status labels use the same rich-content envelope and revision snapshots; no additional lists or columns are required. Markdown export converts visual content into Markdown, preserving common document structures; formatting that Markdown cannot represent may be simplified or represented by limited HTML tags. Expandable sections become a bold title followed by their full body, and inline statuses become ordinary text. Export includes image references, not an archive of attached files. Print/PDF uses the browser's print dialog and includes the bodies of collapsed sections.
 
 ### Images and attachment saves
 
@@ -151,7 +165,7 @@ The editor accepts PNG, JPEG, GIF, and WebP files, up to **2 MB per image in loc
 
 Staged images become ordinary page attachments when you save. A new page with staged images first creates a Draft to obtain its SharePoint item ID, uploads the images, and then saves the final content with permanent attachment URLs and the selected status. An existing page retains its previous saved revision until that final content save. Temporary browser `blob:` image URLs are never persisted to the lists.
 
-Page creation, attachment uploads, and revision snapshots are separate operations. A partial failure can leave an initial draft or successfully uploaded attachments behind. The editor retains the current text and remaining images and reports whether retrying is safe. An uncertain save response or conflicting edit blocks blind retries and asks you to reopen the latest page. Use the recovery download offered for an uncertain save to preserve the current Markdown and staged images before reopening; image previews otherwise belong to the current browser session. Attachments already uploaded stay on the page and can be reused.
+Page creation, attachment uploads, and revision snapshots are separate operations. A partial failure can leave an initial draft or successfully uploaded attachments behind. The editor retains the current text and remaining images and reports whether retrying is safe. An uncertain save response or conflicting edit blocks blind retries and asks you to reopen the latest page. Use the recovery download offered for an uncertain save to preserve the current Markdown and staged images before reopening. A successfully saved browser recovery copy also retains staged image bytes and recreates their preview URLs when restored; it does not upload them or bypass an uncertain-write warning. Attachments already uploaded stay on the page and can be reused.
 
 Attachment access follows the parent item's SharePoint permissions. External image links remain content dependencies and may require network access; the application's own JavaScript, CSS, icons, and logo are bundled.
 
@@ -164,8 +178,10 @@ src/
   assets/               Shared MetSoft emblem, bundled into the HTML
   components/           Reader, visual editor, content renderer, dialogs
   data/                 Local demonstration content
+  editor/               Expand/status nodes and document find/replace
+  hooks/                Browser-local draft recovery lifecycle
   lib/                  Sanitized rich content and Markdown conversion
-  services/             SharePoint/local adapters, image saves, list schema
+  services/             SharePoint/local adapters, recovery, image saves, schema
   types.ts              Shared data contracts
 scripts/
   provision-sharepoint.ps1
@@ -203,5 +219,6 @@ https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/inde
 | Duplicate-list alias error | Resolve canonical/legacy duplicates; the app deliberately does not select one |
 | Save conflict | Another edit changed the item; reload the latest article before editing again |
 | Image save partly completed | Keep the editor open and follow its recovery message; reopen the latest page before retrying an uncertain save |
+| Device recovery unavailable | Browser storage is blocked, unavailable, or full; save normally or use Page tools → Download recovery copy before closing the tab |
 | Browser demo storage is full | Remove unnecessary local files or clear demo storage; production uses SharePoint |
 | Release missing | Check the exact commit's workflow and repository release-write policy |

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -35,6 +36,11 @@ import {
   ArrowRight,
   Bold,
   FileEdit,
+  FileText,
+  Eye,
+  PanelLeft,
+  ChevronsUpDown,
+  CircleDot,
   Check,
   ChevronDown,
   Code2,
@@ -77,6 +83,18 @@ import {
   toMarkdown,
 } from "../lib/content";
 import Modal from "./Modal";
+import Markdown from "./Markdown";
+import { useDraftRecovery } from "../hooks/useDraftRecovery";
+import { SearchReplace } from "../editor/findReplace";
+import FindReplacePanel from "./FindReplacePanel";
+import {
+  ExpandableSection,
+  ExpandSummary,
+  ExpandContent,
+  InlineStatus,
+  createExpandSection,
+  STATUS_TONES,
+} from "../editor/documentBlocks";
 
 type Props = {
   page: Partial<Page>;
@@ -89,6 +107,8 @@ type Props = {
   ) => Promise<void>;
   onCancel: () => void;
   onStateChange: (state: { dirty: boolean; busy: boolean }) => void;
+  onDiscardRecoveryChange: (clear: (() => Promise<void>) | null) => void;
+  onRecoveryWarning: (message: string) => void;
 };
 type Panel = "insert" | "symbol" | "image" | "link" | "more" | null;
 const templates: Record<string, { title: string; body: string }> = {
@@ -233,6 +253,8 @@ export default function Editor({
   onSave,
   onCancel,
   onStateChange,
+  onDiscardRecoveryChange,
+  onRecoveryWarning,
 }: Props) {
   const [basePage, setBasePage] = useState(page),
     [title, setTitle] = useState(page.Title || ""),
@@ -267,6 +289,17 @@ export default function Editor({
     [linkText, setLinkText] = useState(""),
     [attachments, setAttachments] = useState<Attachment[]>([]),
     [attachmentLoading, setAttachmentLoading] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false),
+    [outlineOpen, setOutlineOpen] = useState(false),
+    [preview, setPreview] = useState(false),
+    [findOpen, setFindOpen] = useState(false),
+    [linkTab, setLinkTab] = useState<"pages" | "url">("pages"),
+    [selectedLinkId, setSelectedLinkId] = useState<number | null>(null);
+  const [selectedRecoveryId, setSelectedRecoveryId] = useState("");
+  const toolsRef = useRef<HTMLDivElement>(null),
+    canvasRef = useRef<HTMLDivElement>(null),
+    titleRef = useRef<HTMLTextAreaElement>(null),
+    previewPosition = useRef({ from: 1, to: 1, scroll: 0 });
   const field = useRef<HTMLInputElement>(null),
     uploads = useRef(new Set<string>()),
     selection = useRef({ from: 1, to: 1 }),
@@ -281,6 +314,11 @@ export default function Editor({
         heading: { levels: [1, 2, 3] },
       }),
       Callout,
+      ExpandableSection,
+      ExpandSummary,
+      ExpandContent,
+      InlineStatus,
+      SearchReplace,
       ResizableImage.configure({ allowBase64: true }),
       Link.configure({
         openOnClick: false,
@@ -387,6 +425,58 @@ export default function Editor({
     parentId !== (page.ParentPageId ?? null) ||
     template !== (page.TemplateType || "blank") ||
     Boolean(changeNote);
+  const currentContent = sourceMode
+    ? source
+    : serializeContent(editor?.getHTML() || "");
+  const recoverySnapshot = useMemo(
+    () => ({
+      page: {
+        ...basePage,
+        Title: title,
+        SpaceId: spaceId,
+        ParentPageId: parentId,
+        Summary: summary,
+        Tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        Content: currentContent,
+        TemplateType: template,
+      },
+      changeNote,
+      sourceMode,
+      retryBlocked,
+      pendingImages: pending,
+    }),
+    [
+      basePage,
+      title,
+      spaceId,
+      parentId,
+      summary,
+      tags,
+      currentContent,
+      template,
+      changeNote,
+      sourceMode,
+      retryBlocked,
+      pending,
+    ],
+  );
+  const recovery = useDraftRecovery({
+    initialPage: page,
+    snapshot: recoverySnapshot,
+    dirty,
+    busy,
+  });
+  const recoveryCandidate =
+    recovery.candidates.find(
+      (candidate) => candidate.id === selectedRecoveryId,
+    ) || recovery.candidates[0];
+  useLayoutEffect(() => {
+    onDiscardRecoveryChange(recovery.clear);
+    return () => onDiscardRecoveryChange(null);
+  }, [recovery.clear, onDiscardRecoveryChange]);
   useLayoutEffect(() => {
     onStateChange({ dirty, busy });
   }, [dirty, busy, onStateChange]);
@@ -402,8 +492,33 @@ export default function Editor({
   }, [dirty, busy]);
   useEffect(() => {
     // Changing editability is UI state, not a document edit.
-    editor?.setEditable(!busy && !sourceMode, false);
-  }, [editor, busy, sourceMode]);
+    editor?.setEditable(!busy && !sourceMode && !preview, false);
+  }, [editor, busy, sourceMode, preview]);
+  useLayoutEffect(() => {
+    const field = titleRef.current;
+    if (!field) return;
+    field.style.height = "0px";
+    field.style.height = `${field.scrollHeight}px`;
+  }, [title]);
+  useEffect(() => {
+    const resize = () => {
+      const field = titleRef.current;
+      if (!field) return;
+      field.style.height = "0px";
+      field.style.height = `${field.scrollHeight}px`;
+    };
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!toolsRef.current?.contains(event.target as Node))
+        setToolsOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [toolsOpen]);
   useEffect(
     () => () => {
       uploads.current.forEach((value) => URL.revokeObjectURL(value));
@@ -427,7 +542,7 @@ export default function Editor({
     }
   }, [panel, basePage.Id]);
   function open(next: Panel) {
-    if (!editor || sourceMode) return;
+    if (!editor || sourceMode || preview || busy) return;
     if (panel === next) {
       setPanel(null);
       return;
@@ -440,6 +555,13 @@ export default function Editor({
     };
     setError("");
     setUrl(next === "link" ? editor.getAttributes("link").href || "" : "");
+    const pageLink = String(editor.getAttributes("link").href || "").match(
+      /^#page=(\d+)$/,
+    );
+    setSelectedLinkId(next === "link" && pageLink ? Number(pageLink[1]) : null);
+    setLinkTab(
+      next === "link" && editor.isActive("link") && !pageLink ? "url" : "pages",
+    );
     setAlt("");
     setLinkText(
       editor.state.doc.textBetween(
@@ -449,6 +571,91 @@ export default function Editor({
       ),
     );
     setPanel(next);
+    setToolsOpen(false);
+  }
+  function togglePreview(next: boolean) {
+    if (!editor || busy) return;
+    if (next) {
+      previewPosition.current = {
+        from: editor.state.selection.from,
+        to: editor.state.selection.to,
+        scroll: canvasRef.current?.scrollTop || 0,
+      };
+      setFindOpen(false);
+      setPanel(null);
+    }
+    setToolsOpen(false);
+    setPreview(next);
+    if (!next)
+      requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
+        editor
+          .chain()
+          .setTextSelection(previewPosition.current)
+          .focus(undefined, { scrollIntoView: false })
+          .run();
+        if (canvasRef.current)
+          canvasRef.current.scrollTop = previewPosition.current.scroll;
+      });
+  }
+  function jumpToHeading(position: number) {
+    if (!editor || busy || sourceMode) return;
+    const heading = editor.view.nodeDOM(position);
+    if (heading instanceof HTMLElement) {
+      let ancestor = heading.parentElement;
+      while (ancestor && ancestor !== editor.view.dom) {
+        if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+        ancestor = ancestor.parentElement;
+      }
+      editor
+        .chain()
+        .setTextSelection(position + 1)
+        .focus(undefined, { scrollIntoView: false })
+        .run();
+      heading.scrollIntoView({ block: "center", behavior: "auto" });
+    }
+  }
+  function restoreDraft(id: string) {
+    const apply = () => {
+      setBusy(true);
+      void recovery
+        .restore(id, (restored) => {
+          setBasePage(restored.page);
+          setTitle(restored.page.Title);
+          setSpaceId(restored.page.SpaceId);
+          setParentId(restored.page.ParentPageId ?? null);
+          setSummary(restored.page.Summary || "");
+          setTags(restored.page.Tags?.join(", ") || "");
+          setTemplate(restored.page.TemplateType || "blank");
+          setChangeNote(restored.changeNote);
+          setSourceMode(restored.sourceMode);
+          setSource(restored.sourceMode ? restored.page.Content : "");
+          setRetryBlocked(restored.retryBlocked);
+          setPending(restored.pendingImages);
+          restored.pendingImages.forEach((image) =>
+            uploads.current.add(image.previewUrl),
+          );
+          editor?.commands.setContent(
+            toEditorHTML(restored.page.Content),
+            false,
+          );
+          setChanged(true);
+          setError(restored.conflict || "");
+          setPanel(null);
+          setFindOpen(false);
+          setPreview(false);
+        })
+        .finally(() => setBusy(false));
+    };
+    if (dirty)
+      setConfirmation({
+        title: "Restore the saved draft?",
+        message:
+          "This replaces the edits currently open with the saved copy from this device. Nothing will be published until you save.",
+        actionLabel: "Restore draft",
+        action: apply,
+      });
+    else apply();
   }
   function insert(
     content: Parameters<TiptapEditor["commands"]["insertContent"]>[0],
@@ -550,6 +757,7 @@ export default function Editor({
           "Markdown keeps headings, lists, tables, links, images, and code. Some visual formatting may be simplified when you return to the editor.",
         actionLabel: "Switch to source",
         action: () => {
+          setFindOpen(false);
           setSource(toMarkdown(serializeContent(editor.getHTML())));
           setSourceMode(true);
         },
@@ -606,6 +814,7 @@ export default function Editor({
     setPanel(null);
     setError("");
     try {
+      await recovery.prepareSave();
       const content = sourceMode ? source : serializeContent(editor.getHTML());
       await onSave(
         {
@@ -629,6 +838,13 @@ export default function Editor({
         changeNote.trim(),
         pending,
       );
+      try {
+        await recovery.clear();
+      } catch {
+        onRecoveryWarning(
+          "Page saved. The old recovery copy could not be removed from this browser; discard it before restoring another draft.",
+        );
+      }
     } catch (e) {
       if (e instanceof ImageSaveError) {
         setBasePage(e.page);
@@ -636,11 +852,15 @@ export default function Editor({
         setRetryBlocked(e.retryBlocked);
         editor.commands.setContent(toEditorHTML(e.page.Content), false);
         if (sourceMode) setSource(toMarkdown(e.page.Content));
+      } else {
+        // The server may have accepted a write before its response was lost.
+        // Reopening establishes a fresh page identity/version before retrying.
+        setRetryBlocked(true);
       }
       setError(
-        e instanceof Error
+        e instanceof ImageSaveError
           ? e.message
-          : "The page could not be saved. Your edits are still here.",
+          : `${e instanceof Error ? e.message : "The page could not be saved."} The save result could not be confirmed. Download a recovery copy, then reopen the page before saving again.`,
       );
     } finally {
       setBusy(false);
@@ -653,6 +873,25 @@ export default function Editor({
         .filter(Boolean).length
     : 0;
   const inserts = [
+    {
+      name: "Expand section",
+      hint: "Keep supporting details under a collapsible heading",
+      icon: <ChevronsUpDown size={19} />,
+      run: () => insert(createExpandSection()),
+    },
+    {
+      name: "Status",
+      hint: "An inline label for progress or decisions",
+      icon: <CircleDot size={19} />,
+      run: () => {
+        const position = selection.current.from;
+        insert({
+          type: "status",
+          attrs: { label: "In progress", tone: "blue" },
+        });
+        editor?.commands.setNodeSelection(position);
+      },
+    },
     {
       name: "Image",
       hint: "Upload, paste, or use a link",
@@ -735,6 +974,29 @@ export default function Editor({
   const activeHeading = editor?.isActive("heading")
     ? String(editor.getAttributes("heading").level)
     : "paragraph";
+  const outline: { text: string; level: number; position: number }[] = [];
+  editor?.state.doc.descendants((node, position) => {
+    if (node.type.name === "heading")
+      outline.push({
+        text: node.textContent || "Untitled heading",
+        level: node.attrs.level,
+        position,
+      });
+  });
+  const linkPages = pages
+    .filter(
+      (candidate) =>
+        candidate.Status !== "Archived" && candidate.Id !== basePage.Id,
+    )
+    .filter((candidate) =>
+      `${candidate.Title} ${candidate.Summary} ${spaces.find((space) => space.Id === candidate.SpaceId)?.Title || ""}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    )
+    .sort((a, b) => a.Title.localeCompare(b.Title));
+  const selectedLink = pages.find(
+    (candidate) => candidate.Id === selectedLinkId,
+  );
   return (
     <>
       <section
@@ -755,15 +1017,113 @@ export default function Editor({
             event.stopPropagation();
             setPanel(null);
             editor?.commands.focus();
+          } else if (event.key === "Escape" && toolsOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            setToolsOpen(false);
+            toolsRef.current
+              ?.querySelector<HTMLButtonElement>("button")
+              ?.focus();
           }
         }}
       >
         <header className="rich-page-actions">
           <div className="rich-edit-context">
             <FileEdit size={16} />
-            <span>{basePage.Id ? "Editing page" : "New page"}</span>
+            <span>
+              {preview ? "Preview" : basePage.Id ? "Editing page" : "New page"}
+            </span>
           </div>
           <div className="rich-page-actions-right">
+            {preview ? (
+              <button
+                type="button"
+                className="button"
+                onClick={() => togglePreview(false)}
+              >
+                <ArrowLeft size={15} /> Back to writing
+              </button>
+            ) : (
+              <div className="rich-page-tools" ref={toolsRef}>
+                <button
+                  type="button"
+                  className="button rich-page-tools-toggle"
+                  disabled={busy}
+                  aria-label="Page tools"
+                  aria-expanded={toolsOpen}
+                  aria-controls="page-tools-menu"
+                  onClick={() => {
+                    setToolsOpen(!toolsOpen);
+                    setPanel(null);
+                  }}
+                >
+                  <MoreHorizontal size={17} />
+                  <span>Page tools</span>
+                </button>
+                {toolsOpen && (
+                  <div
+                    className="rich-page-tools-menu"
+                    id="page-tools-menu"
+                    role="group"
+                    aria-label="Page tools"
+                  >
+                    <button
+                      type="button"
+                      disabled={sourceMode}
+                      aria-pressed={outlineOpen}
+                      title={
+                        sourceMode
+                          ? "Return to the visual editor to use the outline"
+                          : undefined
+                      }
+                      onClick={() => {
+                        setOutlineOpen(!outlineOpen);
+                        setToolsOpen(false);
+                      }}
+                    >
+                      <PanelLeft size={16} />
+                      <span>Outline</span>
+                      {outlineOpen && <Check size={14} />}
+                    </button>
+                    <button type="button" onClick={() => togglePreview(true)}>
+                      <Eye size={16} />
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sourceMode}
+                      title={
+                        sourceMode
+                          ? "Return to the visual editor to find and replace"
+                          : undefined
+                      }
+                      onClick={() => {
+                        setFindOpen(true);
+                        setToolsOpen(false);
+                      }}
+                    >
+                      <Search size={16} />
+                      Find and replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setToolsOpen(false);
+                        void downloadRecovery();
+                      }}
+                    >
+                      <FileText size={16} />
+                      Download recovery copy
+                    </button>
+                    {sourceMode && (
+                      <p>
+                        Return to the visual editor for outline and find tools.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               className="button rich-close-editor"
@@ -798,7 +1158,83 @@ export default function Editor({
             </div>
           </div>
         </header>
-        <div className="rich-document-top">
+        {recoveryCandidate && (
+          <aside className="rich-device-recovery" aria-label="Draft recovery">
+            <FileEdit size={18} />
+            <div>
+              <strong>A saved draft is available on this device</strong>
+              <p>
+                Restore your unfinished work, including attached images. This
+                copy has not been published.
+              </p>
+              {recovery.candidates.length > 1 ? (
+                <label>
+                  <span className="visually-hidden">Saved draft</span>
+                  <select
+                    aria-label="Saved draft"
+                    disabled={busy}
+                    value={recoveryCandidate.id}
+                    onChange={(event) =>
+                      setSelectedRecoveryId(event.target.value)
+                    }
+                  >
+                    {recovery.candidates.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.title || "Untitled page"} ·{" "}
+                        {new Date(candidate.updatedAt).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p>
+                  <strong>{recoveryCandidate.title || "Untitled page"}</strong>{" "}
+                  · {new Date(recoveryCandidate.updatedAt).toLocaleString()}
+                  {recoveryCandidate.imageCount
+                    ? ` · ${recoveryCandidate.imageCount} image${recoveryCandidate.imageCount === 1 ? "" : "s"}`
+                    : ""}
+                </p>
+              )}
+              <div className="rich-device-recovery-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  onClick={() => restoreDraft(recoveryCandidate.id)}
+                >
+                  Restore draft
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  onClick={() =>
+                    setConfirmation({
+                      title: "Discard the saved draft?",
+                      message:
+                        "This removes only this recovery copy from the current browser. It does not delete a page or change anything in SharePoint.",
+                      actionLabel: "Discard saved draft",
+                      action: () =>
+                        void recovery.discardCandidate(recoveryCandidate.id),
+                    })
+                  }
+                >
+                  Discard saved draft
+                </button>
+              </div>
+            </div>
+          </aside>
+        )}
+        {recovery.error && (
+          <div className="rich-error" role="status">
+            <Info size={17} />
+            <span>
+              {recovery.error} Your normal Save draft and Publish actions are
+              still available.
+            </span>
+          </div>
+        )}
+        <div className="rich-document-top" hidden={preview}>
           <div className="rich-location">
             <span className="rich-draft-label">
               {page.Status === "Published" ? "Editing published page" : "Draft"}
@@ -859,20 +1295,30 @@ export default function Editor({
             </button>
           </div>
         </div>
-        <label className="rich-title-label">
+        <label className="rich-title-label" hidden={preview}>
           <span className="visually-hidden">Title</span>
-          <input
+          <textarea
+            ref={titleRef}
+            rows={1}
             autoFocus
             aria-label="Title"
             disabled={busy}
             className="rich-title-input"
             maxLength={255}
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) =>
+              setTitle(event.target.value.replace(/[\r\n]+/g, " "))
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                editor?.commands.focus("start");
+              }
+            }}
             placeholder="Give this page a title"
           />
         </label>
-        {details && (
+        {details && !preview && (
           <div className="rich-details" id="rich-page-details">
             <label>
               Summary
@@ -959,8 +1405,58 @@ export default function Editor({
             )}
           </div>
         )}
+        {preview && (
+          <section className="rich-page-preview" aria-label="Page preview">
+            <div className="rich-preview-notice">
+              <Eye size={15} />
+              Preview of your current edits · not published
+            </div>
+            <article>
+              <div className="rich-preview-location">
+                {spaces.find((space) => space.Id === spaceId)?.Title ||
+                  "Choose a space"}
+                {parentId
+                  ? ` / ${pages.find((candidate) => candidate.Id === parentId)?.Title || "Parent page"}`
+                  : ""}
+              </div>
+              <h1>{title.trim() || "Untitled page"}</h1>
+              <div className="rich-preview-meta">
+                {basePage.AuthorName || "You"} ·{" "}
+                {Math.max(1, Math.ceil(words / 200))} min read ·{" "}
+                {basePage.Status || "Draft"}
+              </div>
+              {summary.trim() && (
+                <p className="rich-preview-summary">{summary}</p>
+              )}
+              {tags.trim() && (
+                <div className="rich-preview-tags">
+                  {[
+                    ...new Set(
+                      tags
+                        .split(",")
+                        .map((tag) => tag.trim())
+                        .filter(Boolean),
+                    ),
+                  ].map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+              )}
+              <Markdown
+                content={
+                  sourceMode
+                    ? source
+                    : serializeContent(editor?.getHTML() || "")
+                }
+                idPrefix="preview-"
+                allowBlobImages
+              />
+            </article>
+          </section>
+        )}
         <fieldset
           className="rich-workspace"
+          hidden={preview}
           disabled={busy}
           aria-label="Page content and formatting"
         >
@@ -1123,6 +1619,60 @@ export default function Editor({
               </button>
             )}
           </div>
+          {findOpen && editor && (
+            <FindReplacePanel
+              editor={editor}
+              disabled={busy || sourceMode}
+              onClose={() => setFindOpen(false)}
+            />
+          )}
+          {editor?.isActive("status") && !sourceMode && (
+            <div className="rich-context-bar rich-status-settings">
+              <CircleDot size={14} />
+              <label>
+                Status label
+                <input
+                  aria-label="Status label"
+                  maxLength={40}
+                  value={editor.getAttributes("status").label || ""}
+                  onChange={(event) =>
+                    editor
+                      .chain()
+                      .updateAttributes("status", { label: event.target.value })
+                      .setNodeSelection(editor.state.selection.from)
+                      .run()
+                  }
+                />
+              </label>
+              <label>
+                Color
+                <select
+                  aria-label="Status color"
+                  value={editor.getAttributes("status").tone || "neutral"}
+                  onChange={(event) =>
+                    editor
+                      .chain()
+                      .updateAttributes("status", { tone: event.target.value })
+                      .setNodeSelection(editor.state.selection.from)
+                      .run()
+                  }
+                >
+                  {STATUS_TONES.map((tone) => (
+                    <option key={tone} value={tone}>
+                      {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().deleteSelection().run()}
+              >
+                <Trash2 size={13} />
+                Remove status
+              </button>
+            </div>
+          )}
           {editor?.isActive("codeBlock") && !sourceMode && (
             <div className="rich-context-bar">
               <Code2 size={14} />
@@ -1244,39 +1794,72 @@ export default function Editor({
             </div>
           )}
           <div
-            className="rich-canvas"
-            onDragOver={(event) => {
-              if (event.dataTransfer.types.includes("Files"))
-                event.preventDefault();
-            }}
-            onDrop={(event) => {
-              if (event.defaultPrevented) return;
-              const files = Array.from(event.dataTransfer.files).filter(
-                canImage,
-              );
-              if (!files.length) return;
-              event.preventDefault();
-              if (sourceMode) {
-                setError("Return to the visual editor to add an image.");
-                return;
-              }
-              stage(files);
-            }}
+            className={`rich-writing-layout ${outlineOpen && !sourceMode ? "with-outline" : ""}`}
           >
-            {sourceMode ? (
-              <textarea
-                className="rich-source"
-                aria-label="Article Markdown"
-                value={source}
-                disabled={busy}
-                onChange={(event) => {
-                  setSource(event.target.value);
-                  setChanged(true);
-                }}
-              />
-            ) : (
-              <EditorContent editor={editor} />
+            {outlineOpen && !sourceMode && (
+              <nav className="rich-outline" aria-label="Page outline">
+                <div>
+                  <strong>On this page</strong>
+                  <button
+                    type="button"
+                    aria-label="Close outline"
+                    onClick={() => setOutlineOpen(false)}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                {outline.length ? (
+                  outline.map((heading) => (
+                    <button
+                      type="button"
+                      key={heading.position}
+                      className={`rich-outline-heading level-${heading.level}`}
+                      onClick={() => jumpToHeading(heading.position)}
+                    >
+                      {heading.text}
+                    </button>
+                  ))
+                ) : (
+                  <p>Add headings to give your page a clear structure.</p>
+                )}
+              </nav>
             )}
+            <div
+              ref={canvasRef}
+              className="rich-canvas"
+              onDragOver={(event) => {
+                if (event.dataTransfer.types.includes("Files"))
+                  event.preventDefault();
+              }}
+              onDrop={(event) => {
+                if (event.defaultPrevented) return;
+                const files = Array.from(event.dataTransfer.files).filter(
+                  canImage,
+                );
+                if (!files.length) return;
+                event.preventDefault();
+                if (sourceMode) {
+                  setError("Return to the visual editor to add an image.");
+                  return;
+                }
+                stage(files);
+              }}
+            >
+              {sourceMode ? (
+                <textarea
+                  className="rich-source"
+                  aria-label="Article Markdown"
+                  value={source}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    setChanged(true);
+                  }}
+                />
+              ) : (
+                <EditorContent editor={editor} />
+              )}
+            </div>
           </div>
           {panel && (
             <div
@@ -1499,24 +2082,121 @@ export default function Editor({
               )}
               {panel === "link" && (
                 <div className="rich-link-fields">
+                  <div
+                    className="rich-link-tabs"
+                    role="tablist"
+                    aria-label="Link destination type"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      id="link-pages-tab"
+                      aria-controls="link-pages-panel"
+                      aria-selected={linkTab === "pages"}
+                      onClick={() => setLinkTab("pages")}
+                    >
+                      <FileText size={14} />
+                      Pages
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="link-url-tab"
+                      aria-controls="link-url-panel"
+                      aria-selected={linkTab === "url"}
+                      onClick={() => setLinkTab("url")}
+                    >
+                      <Link2 size={14} />
+                      URL
+                    </button>
+                  </div>
                   <label>
                     Link text
                     <input
-                      autoFocus
                       aria-label="Link text"
                       value={linkText}
+                      placeholder={
+                        selectedLink?.Title || "Selected text or page title"
+                      }
                       onChange={(event) => setLinkText(event.target.value)}
                     />
                   </label>
-                  <label>
-                    Destination
-                    <input
-                      aria-label="Link destination"
-                      value={url}
-                      onChange={(event) => setUrl(event.target.value)}
-                      placeholder="https://… or #heading"
-                    />
-                  </label>
+                  {linkTab === "pages" ? (
+                    <div
+                      role="tabpanel"
+                      id="link-pages-panel"
+                      aria-labelledby="link-pages-tab"
+                    >
+                      <label>
+                        Find a page
+                        <input
+                          autoFocus
+                          aria-label="Search pages"
+                          value={query}
+                          placeholder="Search titles or spaces…"
+                          onChange={(event) => setQuery(event.target.value)}
+                        />
+                      </label>
+                      <div
+                        className="rich-link-page-list"
+                        aria-label="Matching pages"
+                      >
+                        {linkPages.map((candidate) => (
+                          <button
+                            type="button"
+                            key={candidate.Id}
+                            aria-label={candidate.Title}
+                            aria-pressed={selectedLinkId === candidate.Id}
+                            className={
+                              selectedLinkId === candidate.Id ? "selected" : ""
+                            }
+                            onClick={() => setSelectedLinkId(candidate.Id)}
+                          >
+                            <FileText size={16} />
+                            <span>
+                              <strong>{candidate.Title}</strong>
+                              <small>
+                                {spaces.find(
+                                  (space) => space.Id === candidate.SpaceId,
+                                )?.Title || "Space"}{" "}
+                                · {candidate.Status}
+                              </small>
+                            </span>
+                            {selectedLinkId === candidate.Id && (
+                              <Check size={14} />
+                            )}
+                          </button>
+                        ))}
+                        {!linkPages.length && (
+                          <p>
+                            No matching pages. Try a different title or space.
+                          </p>
+                        )}
+                      </div>
+                      {selectedLink && (
+                        <p className="rich-link-selection">
+                          Linking to <strong>{selectedLink.Title}</strong>
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      role="tabpanel"
+                      id="link-url-panel"
+                      aria-labelledby="link-url-tab"
+                    >
+                      <label>
+                        Destination
+                        <input
+                          autoFocus
+                          aria-label="Link destination"
+                          value={url}
+                          onChange={(event) => setUrl(event.target.value)}
+                          placeholder="https://… or #heading"
+                        />
+                      </label>
+                    </div>
+                  )}
                   <div className="rich-popover-actions">
                     {editor?.isActive("link") && (
                       <button
@@ -1539,9 +2219,14 @@ export default function Editor({
                     <button
                       type="button"
                       className="button primary"
-                      disabled={!url.trim()}
+                      disabled={
+                        linkTab === "pages" ? !selectedLink : !url.trim()
+                      }
                       onClick={() => {
-                        const safe = safeContentUrl(url.trim());
+                        const safe =
+                          linkTab === "pages" && selectedLink
+                            ? `#page=${selectedLink.Id}`
+                            : safeContentUrl(url.trim());
                         if (!safe) {
                           setError(
                             "Use an HTTPS, mailto, or relative page link.",
@@ -1550,13 +2235,16 @@ export default function Editor({
                         }
                         insert({
                           type: "text",
-                          text: linkText.trim() || safe,
+                          text:
+                            linkText.trim() ||
+                            (linkTab === "pages" ? selectedLink?.Title : "") ||
+                            safe,
                           marks: [
                             {
                               type: "link",
                               attrs: {
                                 href: safe,
-                                target: "_blank",
+                                target: safe.startsWith("#") ? null : "_blank",
                                 rel: "noopener noreferrer",
                               },
                             },
@@ -1696,6 +2384,25 @@ export default function Editor({
               {pending.length
                 ? ` · ${pending.length} image${pending.length === 1 ? "" : "s"} to upload`
                 : ""}
+            </span>
+            <span
+              className="rich-recovery-status"
+              role="status"
+              title={
+                recovery.savedAt
+                  ? `Saved on this device at ${new Date(recovery.savedAt).toLocaleTimeString()}. SharePoint is updated only when you save or publish.`
+                  : undefined
+              }
+            >
+              {recovery.status === "saved"
+                ? "Saved on this device"
+                : recovery.status === "saving"
+                  ? "Saving on this device…"
+                  : recovery.status === "unavailable"
+                    ? "Device recovery unavailable"
+                    : recovery.status === "loading"
+                      ? "Preparing device recovery…"
+                      : "Device recovery ready"}
             </span>
           </div>
         </footer>

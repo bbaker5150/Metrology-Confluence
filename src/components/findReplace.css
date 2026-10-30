@@ -1,0 +1,126 @@
+.document-find-panel {
+  flex: 0 0 auto;
+  padding: 12px 24px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.document-find-heading,
+.document-find-row,
+.document-find-navigation,
+.document-find-actions,
+.document-find-options,
+.document-find-heading strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.document-find-heading {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.document-find-heading strong {
+  font-size: 12px;
+}
+.document-find-row + .document-find-row {
+  margin-top: 8px;
+}
+.document-find-panel .document-find-field {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+}
+.document-find-field > span {
+  flex: 0 0 72px;
+  color: var(--muted);
+}
+.document-find-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.document-find-navigation,
+.document-find-actions {
+  justify-content: flex-end;
+  min-width: 208px;
+}
+.document-find-panel .button {
+  min-height: 32px;
+  padding: 5px 11px;
+  font-size: 11px;
+}
+.document-find-panel .icon-button {
+  width: 30px;
+  height: 30px;
+}
+.document-find-count {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: auto;
+}
+.document-find-options {
+  flex-wrap: wrap;
+  gap: 15px;
+  margin: 11px 0 0 82px;
+}
+.document-find-panel .document-find-options label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.document-find-options input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--blue);
+}
+.document-find-options > span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.rich-prose .document-find-match {
+  background: #fef08a;
+  color: #422006;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #ca8a0440;
+}
+.rich-prose .document-find-match-active {
+  background: #fbbf24;
+  color: #1c1917;
+  box-shadow: 0 0 0 2px #a16207;
+}
+@media (max-width: 680px) {
+  .document-find-panel {
+    padding: 10px 16px 12px;
+  }
+  .document-find-row {
+    flex-wrap: wrap;
+  }
+  .document-find-panel .document-find-field {
+    flex-basis: 100%;
+  }
+  .document-find-navigation,
+  .document-find-actions {
+    min-width: 0;
+    width: 100%;
+    margin-left: 82px;
+  }
+  .document-find-options {
+    margin-left: 0;
+  }
+}
+@media print {
+  .document-find-panel {
+    display: none !important;
+  }
+}

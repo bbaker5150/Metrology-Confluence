@@ -5,6 +5,8 @@ import {
   isValidElement,
   useState,
   useMemo,
+  useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
@@ -248,17 +250,47 @@ function LegacyMarkdown({
 function RichMarkdown({
   content,
   idPrefix = "",
+  allowBlobImages = false,
 }: {
   content: string;
   idPrefix?: string;
+  allowBlobImages?: boolean;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let collapsed: HTMLDetailsElement[] | null = null;
+    const beforePrint = () => {
+      if (collapsed) return;
+      collapsed = Array.from(
+        rootRef.current?.querySelectorAll<HTMLDetailsElement>(
+          "details:not([open])",
+        ) || [],
+      );
+      collapsed.forEach((details) => {
+        details.open = true;
+      });
+    };
+    const afterPrint = () => {
+      collapsed?.forEach((details) => {
+        details.open = false;
+      });
+      collapsed = null;
+    };
+    window.addEventListener("beforeprint", beforePrint);
+    window.addEventListener("afterprint", afterPrint);
+    return () => {
+      window.removeEventListener("beforeprint", beforePrint);
+      window.removeEventListener("afterprint", afterPrint);
+      afterPrint();
+    };
+  }, [content]);
   const html = useMemo(
     () =>
       sanitizeContentHTML(
         content.trimStart().slice(RICH_PREFIX.length),
-        idPrefix === "editor-",
+        allowBlobImages || idPrefix === "editor-",
       ),
-    [content, idPrefix],
+    [content, idPrefix, allowBlobImages],
   );
   const template = document.createElement("template");
   template.innerHTML = html;
@@ -359,6 +391,12 @@ function RichMarkdown({
                 .closest(".markdown")
                 ?.querySelectorAll<HTMLElement>("[id]") || [],
             ).find((element) => element.id === idPrefix + fragment);
+            for (
+              let ancestor = target?.parentElement;
+              ancestor;
+              ancestor = ancestor.parentElement
+            )
+              if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
             target?.scrollIntoView({
               behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
                 .matches
@@ -382,6 +420,20 @@ function RichMarkdown({
           <strong className="callout-label">{node.dataset.callout}</strong>
           {children()}
         </aside>
+      );
+    if (tag === "details") props.className = "document-expand";
+    if (tag === "div" && node.dataset.type === "expandContent")
+      props.className = "document-expand-content";
+    if (tag === "span" && node.dataset.type === "status")
+      return (
+        <span
+          key={index}
+          className={`document-status status-${node.dataset.tone}`}
+          data-type="status"
+          data-tone={node.dataset.tone}
+        >
+          {node.textContent}
+        </span>
       );
     if (tag === "ul" && node.dataset.type === "taskList")
       props.className = "rich-task-list";
@@ -444,7 +496,7 @@ function RichMarkdown({
     return createElement(tag, props, children());
   }
   return (
-    <div className="markdown rich-document">
+    <div ref={rootRef} className="markdown rich-document">
       {Array.from(template.content.childNodes).map(render)}
     </div>
   );
@@ -452,6 +504,7 @@ function RichMarkdown({
 export default function Markdown(props: {
   content: string;
   idPrefix?: string;
+  allowBlobImages?: boolean;
 }) {
   return isRichContent(props.content) ? (
     <RichMarkdown {...props} />

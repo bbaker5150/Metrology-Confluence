@@ -8,6 +8,32 @@ export const RICH_PREFIX = "<!-- metrology-rich-text:v1 -->";
 export const isRichContent = (content: string) =>
   content.trimStart().startsWith(RICH_PREFIX);
 const CALLOUTS = new Set(["info", "tip", "warning", "decision"]);
+export const STATUS_TONES = [
+  "neutral",
+  "blue",
+  "green",
+  "yellow",
+  "red",
+  "purple",
+] as const;
+export type StatusTone = (typeof STATUS_TONES)[number];
+export function normalizeStatusTone(value: unknown): StatusTone {
+  return STATUS_TONES.includes(value as StatusTone)
+    ? (value as StatusTone)
+    : "neutral";
+}
+export function normalizeStatusLabel(value: unknown): string {
+  return (
+    Array.from(
+      String(value ?? "")
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+      .slice(0, 40)
+      .join("") || "Status"
+  );
+}
 const tags = [
   "p",
   "br",
@@ -47,6 +73,8 @@ const tags = [
   "img",
   "input",
   "label",
+  "details",
+  "summary",
 ];
 const attributes = [
   "href",
@@ -70,6 +98,7 @@ const attributes = [
   "data-language",
   "data-width",
   "data-align",
+  "data-tone",
 ];
 function documentFragment(html: string) {
   const template = document.createElement("template");
@@ -147,10 +176,22 @@ export function sanitizeContentHTML(
       dataType &&
       !(
         (dataType === "taskList" && element.tagName === "UL") ||
-        (dataType === "taskItem" && element.tagName === "LI")
+        (dataType === "taskItem" && element.tagName === "LI") ||
+        (dataType === "expand" && element.tagName === "DETAILS") ||
+        (dataType === "expandContent" &&
+          element.tagName === "DIV" &&
+          element.parentElement?.tagName === "DETAILS") ||
+        (dataType === "status" && element.tagName === "SPAN")
       )
     )
       element.removeAttribute("data-type");
+    if (element.tagName === "SPAN" && dataType === "status") {
+      element.setAttribute(
+        "data-tone",
+        normalizeStatusTone(element.getAttribute("data-tone")),
+      );
+      element.textContent = normalizeStatusLabel(element.textContent);
+    } else element.removeAttribute("data-tone");
     if (element.hasAttribute("data-checked")) {
       if (
         element.tagName === "LI" &&
@@ -236,6 +277,44 @@ export function sanitizeContentHTML(
         ))
     )
       element.removeAttribute("data-language");
+  }
+  // A section has one plain-text title and one rich body. Normalize pasted
+  // native details as well as our saved structure without dropping body nodes.
+  for (const details of Array.from(
+    template.content.querySelectorAll("details"),
+  ).reverse()) {
+    const title = Array.from(details.children).find(
+      (child) => child.tagName === "SUMMARY",
+    );
+    const summary = document.createElement("summary");
+    summary.textContent =
+      title?.textContent?.replace(/\s+/g, " ").trim() || "More details";
+    title?.remove();
+    const body = document.createElement("div");
+    body.dataset.type = "expandContent";
+    for (const child of Array.from(details.childNodes)) {
+      if (
+        child instanceof HTMLElement &&
+        child.dataset.type === "expandContent"
+      )
+        body.append(...Array.from(child.childNodes));
+      else if (child instanceof HTMLElement && child.tagName === "SUMMARY") {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = child.textContent;
+        body.append(paragraph);
+      } else body.append(child);
+    }
+    if (!body.childNodes.length) body.append(document.createElement("p"));
+    details.removeAttribute("open");
+    details.dataset.type = "expand";
+    details.replaceChildren(summary, body);
+  }
+  for (const summary of template.content.querySelectorAll("summary")) {
+    if (summary.parentElement?.tagName !== "DETAILS") {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = summary.textContent;
+      summary.replaceWith(paragraph);
+    }
   }
   return template.innerHTML;
 }
@@ -323,6 +402,21 @@ export function toMarkdown(content: string): string {
       `- [${(node as HTMLElement).getAttribute("data-checked") === "true" ? "x" : " "}] ${body.replace(/^\s*\[[ x]\]\s*/, "").trim()}\n`,
   });
   service.addRule("checkbox", { filter: "input", replacement: () => "" });
+  // Markdown exports deliberately expand every section so no hidden text is
+  // omitted when the file is read outside this application.
+  service.addRule("expandTitle", {
+    filter: "summary",
+    replacement: (body) => `\n\n**${body.trim()}**\n\n`,
+  });
+  service.addRule("expandSection", {
+    filter: "details",
+    replacement: (body) => `\n\n${body.trim()}\n\n`,
+  });
+  service.addRule("inlineStatus", {
+    filter: (node) =>
+      node.nodeName === "SPAN" && node.getAttribute("data-type") === "status",
+    replacement: (body) => body,
+  });
   service.addRule("extendedFormatting", {
     filter: ["u", "sub", "sup", "mark"],
     replacement: (body, node) =>
@@ -335,7 +429,7 @@ export function toMarkdown(content: string): string {
 export function contentText(content: string): string {
   const template = documentFragment(toEditorHTML(content));
   for (const node of template.content.querySelectorAll(
-    "p,h1,h2,h3,h4,h5,h6,li,td,th,pre,blockquote,br",
+    "p,h1,h2,h3,h4,h5,h6,li,td,th,pre,blockquote,br,summary,details",
   ))
     node.append(document.createTextNode(" "));
   for (const image of template.content.querySelectorAll("img"))

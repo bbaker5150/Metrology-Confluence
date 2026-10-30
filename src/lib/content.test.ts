@@ -8,6 +8,7 @@ import {
   serializeContent,
   toEditorHTML,
   toMarkdown,
+  normalizeStatusLabel,
 } from "./content";
 
 describe("rich article compatibility and security", () => {
@@ -117,5 +118,74 @@ describe("rich article compatibility and security", () => {
         '<img src="javascript:alert(1)"><img src="blob:https://elsewhere.example/123">',
       ),
     ).not.toMatch(/src=/);
+  });
+  it("round-trips collapsible rich sections, nested sections and inline status without storing reader state", () => {
+    const html =
+      '<details open data-type="expand"><summary>Evidence &amp; checks</summary><div data-type="expandContent"><h2>Hidden results</h2><p>Calibration <span data-type="status" data-tone="green">Ready for review</span></p><details><summary>Raw measurements</summary><p>42 ± 0.2</p></details></div></details>';
+    const saved = serializeContent(html);
+    const reopened = toEditorHTML(saved);
+    expect(reopened).not.toContain(" open");
+    expect(reopened).toContain('<details data-type="expand">');
+    expect(reopened).toContain("<summary>Evidence &amp; checks</summary>");
+    expect(reopened).toContain(
+      '<span data-type="status" data-tone="green">Ready for review</span>',
+    );
+    expect(toEditorHTML(serializeContent(reopened)).trim()).toBe(
+      reopened.trim(),
+    );
+    expect(contentText(saved)).toContain(
+      "Evidence & checks Hidden results Calibration Ready for review Raw measurements 42 ± 0.2",
+    );
+  });
+  it("exports all collapsed section content and readable statuses, including code, tables, tasks and images", () => {
+    const body = toEditorHTML(
+      "### Measurements\n\n```python\nprint(42)\n```\n\n- [x] Captured\n\n| Sensor | Value |\n| --- | --- |\n| A | 42 |\n\n![Trace](/sites/metsof/Attachments/trace.png)",
+    );
+    const markdown = toMarkdown(
+      serializeContent(
+        `<details><summary>Supporting evidence</summary><div data-type="expandContent">${body}<p><span data-type="status" data-tone="yellow">Needs review</span></p></div></details>`,
+      ),
+    );
+    expect(markdown).toContain("**Supporting evidence**");
+    expect(markdown).toContain("### Measurements");
+    expect(markdown).toContain("```python\nprint(42)");
+    expect(markdown).toContain("- [x] Captured");
+    expect(markdown).toContain("| Sensor | Value |");
+    expect(markdown).toContain("![Trace](/sites/metsof/Attachments/trace.png)");
+    expect(markdown).toContain("Needs review");
+    expect(markdown).not.toMatch(/data-type|<details|<summary/);
+  });
+  it("normalizes untrusted expand/status imports and admits no arbitrary CSS, active content or state attributes", () => {
+    const html = sanitizeContentHTML(
+      '<details open name="exclusive" ontoggle="alert(1)"><summary onclick="alert(1)"><a href="https://example.com">Read this</a></summary><summary>Second title</summary><p data-tone="red" data-type="expandContent">Body <span data-type="status" data-tone="url(javascript:alert(1))" style="color:red" onclick="alert(1)"><b>Review</b><script>alert(1)</script></span></p></details><summary>Orphan title</summary><p><span data-type="status" data-tone="purple">    </span></p>',
+    );
+    expect(html).not.toMatch(
+      /ontoggle|onclick|javascript|script|style=|name=| open|<b>|<a /,
+    );
+    expect(html).toContain("<summary>Read this</summary>");
+    expect(html).toContain("<p>Second title</p>");
+    expect(html).toContain(
+      '<p>Body <span data-type="status" data-tone="neutral">Review</span></p>',
+    );
+    expect(html).toContain("<p>Orphan title</p>");
+    expect(html).toContain(
+      '<span data-type="status" data-tone="purple">Status</span>',
+    );
+    expect(html).not.toContain('<p data-type="expandContent"');
+  });
+  it("bounds status labels without splitting symbols and provides a body/title for empty details", () => {
+    const label = "🔬".repeat(45);
+    expect(normalizeStatusLabel(label)).toBe("🔬".repeat(40));
+    expect(normalizeStatusLabel("  Ready\n for\t review  ")).toBe(
+      "Ready for review",
+    );
+    expect(
+      sanitizeContentHTML(
+        `<p><span data-type="status" data-tone="red">${label}</span></p>`,
+      ),
+    ).toContain("🔬".repeat(40) + "</span>");
+    expect(sanitizeContentHTML("<details></details>")).toBe(
+      '<details data-type="expand"><summary>More details</summary><div data-type="expandContent"><p></p></div></details>',
+    );
   });
 });

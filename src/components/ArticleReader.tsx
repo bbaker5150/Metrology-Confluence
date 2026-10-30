@@ -712,6 +712,13 @@ export default function ArticleReader({
                     e.preventDefault();
                     setActiveHeading(heading.id);
                     const target = document.getElementById(heading.id);
+                    for (
+                      let ancestor = target?.parentElement;
+                      ancestor;
+                      ancestor = ancestor.parentElement
+                    )
+                      if (ancestor instanceof HTMLDetailsElement)
+                        ancestor.open = true;
                     target?.scrollIntoView({
                       behavior: window.matchMedia(
                         "(prefers-reduced-motion: reduce)",
