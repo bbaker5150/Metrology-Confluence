@@ -21,6 +21,8 @@ export interface Page {
   IsPinned: boolean;
   TemplateType: string;
   VersionCount: number;
+  /** SharePoint's built-in Created By user ID; never supplied by an editor. */
+  AuthorId?: number;
   AuthorName: string;
   LastEditorName: string;
   Modified: string;

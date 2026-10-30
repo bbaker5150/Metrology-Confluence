@@ -152,7 +152,7 @@ test("slash insertion works from the keyboard and Escape closes only the insert 
     page.getByRole("textbox", { name: "Search insert options" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("dialog", { name: "Create page", exact: true }),
+    page.getByRole("region", { name: "Create page", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(
@@ -174,42 +174,145 @@ test("the editor close button closes the document even with an insertion panel o
   await expect(
     page.getByRole("dialog", { name: "Insert content", exact: true }),
   ).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.getByRole("button", { name: "Close editor", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Discard unsaved changes?", exact: true })
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
   await expect(
-    page.getByRole("dialog", { name: "Create page", exact: true }),
+    page.getByRole("region", { name: "Create page", exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Knowledge home", exact: true }),
   ).toBeVisible();
 });
 
-test("opening an existing editor stays clean while actual changes still require discard confirmation", async ({
+test("opening an inline editor stays clean while changed content requires explicit discard", async ({
   page,
 }) => {
-  const confirmations: string[] = [];
-  page.on("dialog", async (dialog) => {
-    confirmations.push(dialog.message());
-    await dialog.accept();
-  });
   await page.goto("/#page=1");
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit page", exact: true });
-  await expect(dialog.locator(".rich-save-state")).toHaveText("No changes yet");
-  await dialog
-    .getByRole("button", { name: "Close dialog", exact: true })
+  const editor = page.getByRole("region", { name: "Edit page", exact: true });
+  await expect(editor).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Edit page", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Home", exact: true }),
+  ).toBeEnabled();
+  await expect(editor.locator(".rich-save-state")).toHaveText("No changes yet");
+  await editor
+    .getByRole("button", { name: "Close editor", exact: true })
     .click();
-  await expect(dialog).toHaveCount(0);
-  expect(confirmations).toEqual([]);
+  await expect(editor).toHaveCount(0);
+  await expect(
+    page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
-  await dialog.getByLabel("Title", { exact: true }).fill("Changed title");
-  await expect(dialog.locator(".rich-save-state")).toHaveText(
+  await editor.getByLabel("Title", { exact: true }).fill("Changed title");
+  await expect(editor.locator(".rich-save-state")).toHaveText(
     "Unsaved changes",
   );
-  await dialog
-    .getByRole("button", { name: "Close dialog", exact: true })
+  await editor
+    .getByRole("button", { name: "Close editor", exact: true })
     .click();
-  await expect(dialog).toHaveCount(0);
-  expect(confirmations).toEqual(["Discard your unsaved changes?"]);
+  const discard = page.getByRole("dialog", {
+    name: "Discard unsaved changes?",
+    exact: true,
+  });
+  await expect(discard).toBeVisible();
+  await discard
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
+  await expect(editor).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Welcome to the knowledge hub",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("keeping edits during sidebar navigation preserves content and saves directly into the reader", async ({
+  page,
+}) => {
+  await page.goto("/#page=1");
+  await page.getByRole("button", { name: "Edit page", exact: true }).click();
+  const editor = page.getByRole("region", { name: "Edit page", exact: true });
+  await editor
+    .getByLabel("Title", { exact: true })
+    .fill("Shared knowledge revision");
+  await editor
+    .getByRole("textbox", { name: "Article content" })
+    .fill("Preserved work from the inline editor.");
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  const discard = page.getByRole("dialog", {
+    name: "Discard unsaved changes?",
+    exact: true,
+  });
+  await expect(discard).toBeVisible();
+  await discard
+    .getByRole("button", { name: "Keep editing", exact: true })
+    .click();
+  await expect(editor.getByLabel("Title", { exact: true })).toHaveValue(
+    "Shared knowledge revision",
+  );
+  await expect(
+    editor.getByRole("textbox", { name: "Article content" }),
+  ).toHaveText("Preserved work from the inline editor.");
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(editor).toHaveCount(0);
+  await expect(discard).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Shared knowledge revision",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".article-content")).toContainText(
+    "Preserved work from the inline editor.",
+  );
+});
+
+test("searching during inline editing protects unsaved content until the destination is confirmed", async ({
+  page,
+}) => {
+  await page.goto("/#page=1");
+  await page.getByRole("button", { name: "Edit page", exact: true }).click();
+  const editor = page.getByRole("region", { name: "Edit page", exact: true });
+  await editor
+    .getByRole("textbox", { name: "Article content" })
+    .fill("This change will be discarded.");
+  await page.keyboard.press("Control+k");
+  const search = page.getByRole("dialog", {
+    name: "Search knowledge",
+    exact: true,
+  });
+  await search.getByRole("searchbox").fill("Measurement readiness checklist");
+  await search.locator(".search-result").first().click();
+  const discard = page.getByRole("dialog", {
+    name: "Discard unsaved changes?",
+    exact: true,
+  });
+  await expect(discard).toBeVisible();
+  await expect(page).toHaveURL(/#page=1$/);
+  await discard
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
+  await expect(editor).toHaveCount(0);
+  await expect(page).toHaveURL(/#page=2$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Measurement readiness checklist",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/#page=1");
+  await expect(page.locator(".article-content")).not.toContainText(
+    "This change will be discarded.",
+  );
 });

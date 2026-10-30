@@ -1,28 +1,3 @@
-.modal:has(.rich-editor) {
-  width: min(1300px, calc(100vw - 48px));
-  height: min(94dvh, 1100px);
-  max-height: 94dvh;
-  border-radius: 18px;
-  overflow: hidden;
-}
-.modal:has(.rich-editor) > .modal-header {
-  min-height: 59px;
-  padding: 14px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-}
-.modal:has(.rich-editor) > .modal-header h2 {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.modal:has(.rich-editor) > .modal-body {
-  padding: 0;
-  overflow: hidden;
-  min-height: 0;
-  display: flex;
-  flex: 1;
-}
 .rich-editor {
   width: 100%;
   min-height: 0;
@@ -908,20 +883,6 @@
   }
 }
 @media (max-width: 650px) {
-  .modal-backdrop:has(.rich-editor) {
-    padding: 0;
-  }
-  .modal:has(.rich-editor) {
-    width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-  .modal:has(.rich-editor) > .modal-header {
-    min-height: 49px;
-    padding: 10px 16px;
-  }
   .rich-document-top {
     padding: 12px 16px 4px;
     gap: 7px;
@@ -1082,4 +1043,124 @@ fieldset.rich-workspace {
   text-underline-offset: 3px;
   font-size: 11px;
   font-weight: 600;
+}
+
+/* Editing is a workspace view, with navigation available throughout. */
+.rich-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 65px;
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.rich-edit-context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.rich-page-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rich-close-editor {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  min-height: 36px;
+}
+.rich-editor .rich-title-label {
+  width: 100%;
+  max-width: 1000px;
+  padding: 10px 50px 18px;
+  margin: 0 auto;
+}
+.rich-editor .rich-document-top {
+  padding: 18px 28px 2px;
+}
+.rich-editor .rich-workspace,
+.rich-editor .rich-canvas {
+  background: var(--surface);
+}
+.rich-editor .rich-canvas {
+  padding: 0 24px;
+}
+.rich-editor .rich-canvas .tiptap {
+  max-width: 952px;
+  padding: 32px 26px 90px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.rich-editor .rich-editor-footer {
+  padding: 11px 28px;
+  min-height: 40px;
+}
+.rich-editor .rich-editor-footer > div:first-child {
+  width: 100%;
+  justify-content: space-between;
+}
+@media (max-width: 1000px) {
+  .rich-page-actions {
+    padding: 12px 22px;
+  }
+  .rich-editor .rich-title-label {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .rich-editor .rich-canvas {
+    padding: 0 16px;
+  }
+  .rich-editor .rich-canvas .tiptap {
+    padding: 28px 16px 80px;
+  }
+}
+@media (max-width: 650px) {
+  .rich-page-actions {
+    min-height: 59px;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .rich-edit-context {
+    gap: 6px;
+    font-size: 10px;
+  }
+  .rich-edit-context svg {
+    display: none;
+  }
+  .rich-page-actions-right {
+    gap: 5px;
+  }
+  .rich-close-editor {
+    padding: 6px;
+    font-size: 10px;
+  }
+  .rich-editor .rich-document-top {
+    padding: 12px 14px 0;
+  }
+  .rich-editor .rich-title-label {
+    padding: 8px 18px 13px;
+  }
+  .rich-editor .rich-canvas {
+    padding: 0 8px;
+  }
+  .rich-editor .rich-canvas .tiptap {
+    padding: 24px 10px 60px;
+  }
+  .rich-editor .rich-editor-footer {
+    padding: 10px 16px;
+  }
+  .rich-editor .rich-editor-footer > div:first-child {
+    flex-direction: row;
+    align-items: center;
+  }
+  .rich-popover {
+    max-height: min(440px, calc(100% - 102px));
+  }
 }

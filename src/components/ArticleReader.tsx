@@ -17,9 +17,10 @@ import {
   MoreHorizontal,
   ChevronDown,
   Link as LinkIcon,
+  Trash2,
 } from "lucide-react";
 import type { Attachment, Comment, Page, PageVersion, Space } from "../types";
-import { service } from "../services/sharepointService";
+import { PageDeletionError, service } from "../services/sharepointService";
 import Markdown, { extractHeadings, type Heading } from "./Markdown";
 import Modal from "./Modal";
 import { contentText, toMarkdown } from "../lib/content";
@@ -32,6 +33,7 @@ type Props = {
   onSpace?: (id: number) => void;
   onEdit: () => void;
   onChanged: (page: Page) => void;
+  onDeleted: (page: Page) => void;
   onToast: (message: string) => void;
 };
 function relative(value: string) {
@@ -79,6 +81,7 @@ export default function ArticleReader({
   onSpace,
   onEdit,
   onChanged,
+  onDeleted,
   onToast,
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -92,10 +95,39 @@ export default function ArticleReader({
   const [loading, setLoading] = useState(true);
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [activeHeading, setActiveHeading] = useState("");
+  const [deletePermission, setDeletePermission] = useState<number | null>(null);
+  const [deleteDialogPage, setDeleteDialogPage] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteRetryBlocked, setDeleteRetryBlocked] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const articleContent = useRef<HTMLDivElement>(null);
   const actionMenu = useRef<HTMLDetailsElement>(null);
   const commentPending = useRef(false);
+  const deletePending = useRef(false);
+  const currentPageId = useRef(page.Id);
+  currentPageId.current = page.Id;
+  const canDelete = deletePermission === page.Id;
+  useEffect(() => {
+    let active = true;
+    setDeletePermission(null);
+    setDeleteDialogPage(null);
+    setDeleteError("");
+    setDeleteRetryBlocked(false);
+    setDeleting(false);
+    // Only a fresh identity/AuthorId check may expose the destructive action.
+    void service
+      .canDeletePage(page.Id)
+      .then((allowed) => {
+        if (active && allowed) setDeletePermission(page.Id);
+      })
+      .catch(() => {
+        // A failed identity check keeps the action hidden.
+      });
+    return () => {
+      active = false;
+    };
+  }, [page.Id]);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (!actionMenu.current?.contains(event.target as Node))
@@ -137,6 +169,7 @@ export default function ArticleReader({
   const children = pages.filter(
     (p) => p.ParentPageId === page.Id && p.Status !== "Archived",
   );
+  const childPageCount = pages.filter((p) => p.ParentPageId === page.Id).length;
   const readingMinutes = Math.max(
     1,
     Math.ceil(contentText(page.Content).split(/\s+/).length / 220),
@@ -220,6 +253,47 @@ export default function ArticleReader({
       });
     } finally {
       commentPending.current = false;
+    }
+  }
+  async function deleteCurrentPage() {
+    if (
+      !canDelete ||
+      deleteDialogPage !== page.Id ||
+      childPageCount > 0 ||
+      deleteRetryBlocked ||
+      busy ||
+      deletePending.current
+    )
+      return;
+    const deletedPage = page;
+    deletePending.current = true;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      // The service rechecks both the creator and all children before deleting.
+      await service.deletePage(deletedPage.Id);
+      if (currentPageId.current !== deletedPage.Id) return;
+      setDeleteDialogPage(null);
+      setDeletePermission(null);
+      onDeleted(deletedPage);
+      onToast(
+        service.mode === "sharepoint"
+          ? "Page moved to the SharePoint recycle bin."
+          : "Page deleted.",
+      );
+    } catch (error) {
+      if (currentPageId.current !== deletedPage.Id) return;
+      setDeleteError(
+        error instanceof Error
+          ? error.message
+          : "The page could not be deleted.",
+      );
+      setDeleteRetryBlocked(
+        error instanceof PageDeletionError && error.retryBlocked,
+      );
+    } finally {
+      deletePending.current = false;
+      if (currentPageId.current === deletedPage.Id) setDeleting(false);
     }
   }
   function exportMarkdown() {
@@ -369,6 +443,20 @@ export default function ArticleReader({
                   <Printer size={16} />
                   Print or save PDF
                 </button>
+                {canDelete && (
+                  <>
+                    <div className="reader-menu-divider" />
+                    <button
+                      type="button"
+                      className="reader-delete-action"
+                      disabled={busy || deleting}
+                      onClick={() => setDeleteDialogPage(page.Id)}
+                    >
+                      <Trash2 size={16} />
+                      Delete page
+                    </button>
+                  </>
+                )}
               </div>
             </details>
             <button type="button" className="button primary" onClick={onEdit}>
@@ -644,6 +732,65 @@ export default function ArticleReader({
           )}
         </aside>
       </div>
+      {deleteDialogPage === page.Id && (
+        <Modal
+          title="Delete page"
+          onClose={() => {
+            if (!deletePending.current) setDeleteDialogPage(null);
+          }}
+        >
+          <div className="delete-page-confirmation" aria-busy={deleting}>
+            <p className="delete-page-title">Delete “{page.Title}”?</p>
+            <p>
+              {service.mode === "sharepoint"
+                ? "This page and its attachments will move to the SharePoint recycle bin. Revision history and discussion records are retained for a restored page."
+                : "This page will be removed from this browser’s workspace. This demo has no undo or recycle bin."}
+            </p>
+            {childPageCount > 0 && (
+              <div className="delete-page-children" role="status">
+                Move or delete its {childPageCount} child{" "}
+                {childPageCount === 1 ? "page" : "pages"} first, including any
+                drafts or archived pages. Child pages are never deleted
+                automatically.
+              </div>
+            )}
+            {deleteError && (
+              <div className="error-banner" role="alert">
+                {deleteError}
+              </div>
+            )}
+            <div className="delete-page-actions">
+              <button
+                type="button"
+                className="button"
+                disabled={deleting}
+                onClick={() => setDeleteDialogPage(null)}
+              >
+                {deleteRetryBlocked ? "Close" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                className="button delete-page-button"
+                disabled={
+                  deleting ||
+                  busy ||
+                  childPageCount > 0 ||
+                  !canDelete ||
+                  deleteRetryBlocked
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void deleteCurrentPage();
+                }}
+              >
+                <Trash2 size={15} />
+                {deleting ? "Deleting…" : "Delete page"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {historyOpen && (
         <Modal
           title="Version history"

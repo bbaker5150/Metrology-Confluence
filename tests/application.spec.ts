@@ -116,9 +116,12 @@ test("mobile navigation, themes, and safe Markdown", async ({ page }) => {
   await page
     .getByRole("button", { name: "More formatting", exact: true })
     .click();
-  page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Markdown source", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Switch to Markdown source?", exact: true })
+    .getByRole("button", { name: "Switch to source", exact: true })
     .click();
   await page
     .getByLabel("Article Markdown")

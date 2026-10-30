@@ -64,7 +64,22 @@ async function openSharePointHost(
       return route.fulfill({ contentType: "text/html", body: html });
     }
     if (path.endsWith("/_api/web/currentuser"))
-      return json({ Title: "SharePoint Editor", IsSiteAdmin: false });
+      return json({ Id: 7, Title: "SharePoint Editor", IsSiteAdmin: false });
+    // These host-layout tests use a site where the optional app-user group has
+    // not been configured. The complete repair flow has its own browser fixture.
+    if (path.endsWith("/_api/web/sitegroups/getbyname('Metrology App User')"))
+      return json({ error: { message: "Group not found" } }, 404);
+    if (path.endsWith("/_api/web/roledefinitions"))
+      return json({
+        value: [
+          {
+            Id: 3,
+            Name: "Contribute",
+            RoleTypeKind: 3,
+            BasePermissions: { Low: "15", High: "0" },
+          },
+        ],
+      });
     if (path.endsWith("/_api/web/EffectiveBasePermissions")) {
       if (failOwnerLookup)
         return json(

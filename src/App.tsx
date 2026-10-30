@@ -28,6 +28,7 @@ import emblem from "./assets/metsoft-emblem.webp";
 import Modal from "./components/Modal";
 import Editor from "./components/Editor";
 import ArticleReader from "./components/ArticleReader";
+import GroupAccessPanel from "./components/GroupAccessPanel";
 
 type View = "home" | "space" | "pinned" | "recent" | "drafts" | "tag";
 const relative = (date: string) => {
@@ -82,6 +83,19 @@ export default function App() {
     [expandedSpaces, setExpandedSpaces] = useState<number[]>([]),
     [createOpen, setCreateOpen] = useState(false);
   const createRef = useRef<HTMLDivElement>(null);
+  const editorState = useRef({ dirty: false, busy: false });
+  const editorOpen = useRef(false);
+  editorOpen.current = Boolean(editor);
+  const currentHash = useRef(location.hash);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [editorSession, setEditorSession] = useState(0);
+  const reportEditorState = useCallback(
+    (state: { dirty: boolean; busy: boolean }) => {
+      editorState.current = state;
+    },
+    [],
+  );
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem("mc-theme") || "light";
@@ -90,6 +104,30 @@ export default function App() {
     }
   });
   const notify = useCallback((message: string) => setToast(message), []);
+  const finishEditing = useCallback(() => {
+    editorState.current = { dirty: false, busy: false };
+    editorOpen.current = false;
+    setEditor(null);
+  }, []);
+  const transition = useCallback(
+    (action: () => void) => {
+      setCreateOpen(false);
+      setSearch(false);
+      setMobile(false);
+      if (editorOpen.current && editorState.current.busy) {
+        notify("Your page is still saving. Please wait before leaving.");
+        return;
+      }
+      if (editorOpen.current && editorState.current.dirty) {
+        pendingNavigation.current = action;
+        setDiscardOpen(true);
+        return;
+      }
+      finishEditing();
+      action();
+    },
+    [finishEditing, notify],
+  );
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -142,20 +180,39 @@ export default function App() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (!editor && !admin && !newSpace) setSearch((v) => !v);
+        if (!admin && !newSpace && !discardOpen) setSearch((v) => !v);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [editor, admin, newSpace]);
+  }, [admin, newSpace, discardOpen]);
   useEffect(() => {
-    const h = () =>
-      setPageId(
-        Number(new URLSearchParams(location.hash.slice(1)).get("page")) || 0,
-      );
+    const h = () => {
+      const nextHash = location.hash;
+      if (nextHash === currentHash.current) return;
+      if (editorOpen.current) {
+        history.replaceState(
+          null,
+          "",
+          location.pathname + location.search + currentHash.current,
+        );
+      }
+      transition(() => {
+        currentHash.current = nextHash;
+        history.replaceState(
+          null,
+          "",
+          location.pathname + location.search + nextHash,
+        );
+        setPageId(
+          Number(new URLSearchParams(nextHash.slice(1)).get("page")) || 0,
+        );
+        window.scrollTo({ top: 0 });
+      });
+    };
     window.addEventListener("hashchange", h);
     return () => window.removeEventListener("hashchange", h);
-  }, []);
+  }, [transition]);
   useEffect(() => {
     if (!createOpen) return;
     const h = (e: PointerEvent) => {
@@ -164,36 +221,46 @@ export default function App() {
     document.addEventListener("pointerdown", h);
     return () => document.removeEventListener("pointerdown", h);
   }, [createOpen]);
-  const navigate = (id: number) => {
+  const navigateNow = (id: number) => {
     setPageId(id);
-    location.hash = `page=${id}`;
+    const nextHash = `#page=${id}`;
+    currentHash.current = nextHash;
+    history.pushState(null, "", location.pathname + location.search + nextHash);
     setSearch(false);
     setMobile(false);
     window.scrollTo({ top: 0 });
   };
-  const go = (next: View, id?: number) => {
-    setView(next);
-    setSpaceId(id);
-    setPageId(0);
-    history.replaceState(null, "", location.pathname + location.search);
+  const navigate = (id: number) => transition(() => navigateNow(id));
+  const go = (next: View, id?: number) =>
+    transition(() => {
+      setView(next);
+      setSpaceId(id);
+      setPageId(0);
+      currentHash.current = "";
+      history.replaceState(null, "", location.pathname + location.search);
+      window.scrollTo({ top: 0 });
+    });
+  const startEditor = (next: Partial<Page>) => {
+    setEditorSession((value) => value + 1);
+    setEditor(next);
     setMobile(false);
     window.scrollTo({ top: 0 });
   };
-  const create = (parent?: Page) => {
-    setCreateOpen(false);
-    if (!spaces.length) {
-      setNewSpace(true);
-      return;
-    }
-    setEditor({
-      SpaceId: parent?.SpaceId || spaceId || spaces[0]?.Id,
-      ParentPageId: parent?.Id || null,
-      Title: "",
-      Content: "",
-      Tags: [],
-      Status: "Draft",
+  const create = (parent?: Page) =>
+    transition(() => {
+      if (!spaces.length) {
+        setNewSpace(true);
+        return;
+      }
+      startEditor({
+        SpaceId: parent?.SpaceId || spaceId || spaces[0]?.Id,
+        ParentPageId: parent?.Id || null,
+        Title: "",
+        Content: "",
+        Tags: [],
+        Status: "Draft",
+      });
     });
-  };
   const changed = (p: Page) =>
     setPages((v) =>
       v.some((x) => x.Id === p.Id)
@@ -269,8 +336,15 @@ export default function App() {
     </div>
   );
   return (
-    <div className="workspace-shell">
-      <a className="skip-link" href="#main-content">
+    <div className={`workspace-shell ${editor ? "is-editing" : ""}`}>
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >
         Skip to content
       </a>
       {mobile && (
@@ -518,8 +592,7 @@ export default function App() {
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      setCreateOpen(false);
-                      setNewSpace(true);
+                      transition(() => setNewSpace(true));
                     }}
                   >
                     <FolderOpen size={19} />
@@ -533,8 +606,12 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main id="main-content" className="workspace-content" tabIndex={-1}>
-          {service.mode === "local" && (
+        <main
+          id="main-content"
+          className={`workspace-content ${editor ? "workspace-editing" : ""}`}
+          tabIndex={-1}
+        >
+          {service.mode === "local" && !editor && (
             <div className="demo-notice">
               <span className="connection-dot demo" />
               Demo workspace
@@ -543,10 +620,38 @@ export default function App() {
               </span>
             </div>
           )}
-          {error ? (
+          {editor ? (
+            <Editor
+              key={editorSession}
+              page={editor}
+              spaces={spaces}
+              pages={pages}
+              onStateChange={reportEditorState}
+              onCancel={() => transition(() => void refresh())}
+              onSave={async (p, note, images) => {
+                const saved = await savePageWithImages(p, note, images || []);
+                changed(saved);
+                finishEditing();
+                navigateNow(saved.Id);
+                notify(
+                  saved.Status === "Published"
+                    ? "Page published."
+                    : "Draft saved.",
+                );
+              }}
+            />
+          ) : error ? (
             <section className="error-panel" role="alert">
               <h2>We couldn’t open this workspace</h2>
               <p>{error}</p>
+              {service.mode === "sharepoint" &&
+                !canManageWorkspace &&
+                /denied access/i.test(error) && (
+                  <p>
+                    Ask a site owner to check Team access in Workspace settings
+                    for Metrology App User.
+                  </p>
+                )}
               <div className="button-row">
                 <button
                   type="button"
@@ -579,8 +684,15 @@ export default function App() {
               spaces={spaces}
               onNavigate={navigate}
               onSpace={(id) => go("space", id)}
-              onEdit={() => setEditor(page)}
+              onEdit={() => startEditor(page)}
               onChanged={changed}
+              onDeleted={(deleted) => {
+                setPages((current) =>
+                  current.filter((item) => item.Id !== deleted.Id),
+                );
+                go("space", deleted.SpaceId);
+                void refresh();
+              }}
               onToast={notify}
             />
           ) : pageId ? (
@@ -819,29 +931,52 @@ export default function App() {
           onNavigate={navigate}
         />
       )}
-      {editor && (
-        <Editor
-          page={editor}
-          spaces={spaces}
-          pages={pages}
-          onCancel={() => {
-            setEditor(null);
-            void refresh();
+      {discardOpen && (
+        <Modal
+          title="Discard unsaved changes?"
+          onClose={() => {
+            pendingNavigation.current = null;
+            setDiscardOpen(false);
           }}
-          onSave={async (p, note, images) => {
-            const saved = await savePageWithImages(p, note, images || []);
-            changed(saved);
-            setEditor(null);
-            navigate(saved.Id);
-            notify(
-              saved.Status === "Published" ? "Page published." : "Draft saved.",
-            );
-          }}
-        />
+        >
+          <p className="discard-description">
+            Your latest changes have not been saved. Keep editing to finish your
+            page, or discard them to leave.
+          </p>
+          <div className="button-row discard-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                pendingNavigation.current = null;
+                setDiscardOpen(false);
+              }}
+            >
+              Keep editing
+            </button>
+            <button
+              type="button"
+              className="button danger"
+              onClick={() => {
+                const action = pendingNavigation.current;
+                pendingNavigation.current = null;
+                setDiscardOpen(false);
+                finishEditing();
+                action?.();
+              }}
+            >
+              Discard changes
+            </button>
+          </div>
+        </Modal>
       )}
       {admin && canManageWorkspace && (
         <SetupDialog
           onClose={() => setAdmin(false)}
+          onSiteChange={(url) => {
+            setAdmin(false);
+            transition(() => location.assign(url));
+          }}
           onReady={async () => {
             await refresh();
             notify("Workspace setup is ready.");
@@ -1119,14 +1254,17 @@ function SearchDialog({
 function SetupDialog({
   onClose,
   onReady,
+  onSiteChange,
 }: {
   onClose: () => void;
   onReady: () => Promise<void>;
+  onSiteChange: (url: string) => void;
 }) {
   const [checks, setChecks] = useState<
       { title: string; exists: boolean; missingFields: string[] }[]
     >([]),
     [busy, setBusy] = useState(false),
+    [accessBusy, setAccessBusy] = useState(false),
     [error, setError] = useState(""),
     [site, setSite] = useState("");
   const check = async () => {
@@ -1141,6 +1279,7 @@ function SetupDialog({
     }
   };
   const useSite = () => {
+    if (busy || accessBusy) return;
     setError("");
     try {
       if (!site.trim())
@@ -1152,7 +1291,7 @@ function SetupDialog({
         );
       const current = new URL(location.href);
       current.searchParams.set("siteUrl", url.href);
-      location.assign(current.href);
+      onSiteChange(current.href);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -1161,7 +1300,12 @@ function SetupDialog({
     void check();
   }, []);
   return (
-    <Modal title="Workspace settings" onClose={onClose}>
+    <Modal
+      title="Workspace settings"
+      onClose={() => {
+        if (!busy && !accessBusy) onClose();
+      }}
+    >
       <p>
         Four SharePoint lists store your spaces, pages, revision history, and
         discussions. Setup is repeatable and adds only missing lists and
@@ -1200,7 +1344,7 @@ function SetupDialog({
         <button
           type="button"
           className="button"
-          disabled={busy}
+          disabled={busy || accessBusy}
           onClick={() => void check()}
         >
           Check again
@@ -1210,6 +1354,7 @@ function SetupDialog({
           className="button primary"
           disabled={
             busy ||
+            accessBusy ||
             service.mode === "local" ||
             (checks.length > 0 &&
               checks.every((c) => c.exists && !c.missingFields.length))
@@ -1236,6 +1381,9 @@ function SetupDialog({
               : "Create missing lists & fields"}
         </button>
       </div>
+      <fieldset className="settings-access" disabled={busy}>
+        <GroupAccessPanel onBusyChange={setAccessBusy} />
+      </fieldset>
       <hr />
       <details className="connection-details">
         <summary>Connection settings</summary>
@@ -1273,6 +1421,7 @@ function SetupDialog({
           <button
             className="button"
             type="button"
+            disabled={busy || accessBusy}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

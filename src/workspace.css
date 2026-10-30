@@ -1079,3 +1079,42 @@
     font-size: 11px;
   }
 }
+
+.workspace-shell.is-editing .workspace-main {
+  height: 100dvh;
+  min-height: 0;
+}
+.workspace-shell.is-editing .workspace-topbar {
+  flex: 0 0 70px;
+}
+.workspace-content.workspace-editing {
+  display: flex;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.workspace-shell.is-editing .workspace-footer {
+  display: none;
+}
+.discard-description {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 0 0 22px;
+}
+.discard-actions {
+  justify-content: flex-end;
+}
+@media (max-width: 650px) {
+  .workspace-shell.is-editing .workspace-topbar {
+    flex-basis: 62px;
+  }
+}
+
+fieldset.settings-access {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+}

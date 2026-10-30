@@ -36,3 +36,11 @@ The legacy [Code Block macro](https://support.atlassian.com/confluence-cloud/doc
 ## Implementation boundaries
 
 Reuse interaction principles while retaining the suite's existing colors, typography, and spacing. The application still ships as one self-contained HTML file and uses SharePoint Lists. Existing Markdown pages, revisions, and exports must remain readable; richer editing must not silently discard old content. User-entered links and rich HTML require sanitization. Continue to verify the final bundle in a surrounding SharePoint ASP.NET form so editor controls never cause host postbacks.
+
+## Implemented refinements
+
+The visual editor now occupies the main document area with the workspace sidebar available. App navigation with unsaved edits uses an in-app discard dialog; source conversion and template replacement also use explicit in-app confirmations. A browser navigation guard remains available where the host supports it, but sandboxed hosts can suppress native leave prompts. Saving remains explicit.
+
+The reader's More menu includes creator-only deletion, verified from SharePoint's native creator ID before the action. Only leaf pages can be deleted; SharePoint recycles the page and its attachments while separate revision and discussion records remain available for restore. This is an app interaction rule: the Contribute permission used for shared editing also permits deletion through native SharePoint or REST outside the app.
+
+Owner-only Workspace settings now separates schema readiness from **Team access**. An owner can inspect and review a repair for the existing **Metrology App User** group's Contribute access across the four app lists and existing unique item scopes. Existing owner/other grants and content approval remain intact; host-file and site-wide permissions are outside that repair. Publishing a GitHub build does not apply tenant permissions. See the [deployment and access instructions](../README.md#shared-team-access).

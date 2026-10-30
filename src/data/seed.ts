@@ -76,6 +76,7 @@ export function createSeed(): {
     TemplateType: "blank",
     VersionCount: 1,
     etag: '"1"',
+    AuthorId: 1,
     AuthorName: "Demo Editor",
     LastEditorName: "Demo Editor",
     Created: ago(240 + Id),

@@ -1,0 +1,36 @@
+.team-access {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 22px;
+}
+.team-access-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.team-access-heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.team-access > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.team-access .setup-row {
+  gap: 14px;
+  align-items: flex-start;
+}
+.team-access-issues {
+  padding-left: 20px;
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  list-style: disc;
+}
+.team-access .error-message p {
+  margin: 0;
+}

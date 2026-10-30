@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   EditorContent,
   useEditor,
@@ -25,8 +31,10 @@ import {
   AlignCenter,
   AlignRight,
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   Bold,
+  FileEdit,
   Check,
   ChevronDown,
   Code2,
@@ -80,6 +88,7 @@ type Props = {
     images?: PendingImage[],
   ) => Promise<void>;
   onCancel: () => void;
+  onStateChange: (state: { dirty: boolean; busy: boolean }) => void;
 };
 type Panel = "insert" | "symbol" | "image" | "link" | "more" | null;
 const templates: Record<string, { title: string; body: string }> = {
@@ -223,6 +232,7 @@ export default function Editor({
   pages = [],
   onSave,
   onCancel,
+  onStateChange,
 }: Props) {
   const [basePage, setBasePage] = useState(page),
     [title, setTitle] = useState(page.Title || ""),
@@ -243,6 +253,12 @@ export default function Editor({
     [query, setQuery] = useState(""),
     [menuIndex, setMenuIndex] = useState(0),
     [pending, setPending] = useState<PendingImage[]>([]);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    message: string;
+    actionLabel: string;
+    action: () => void;
+  } | null>(null);
   const [sourceMode, setSourceMode] = useState(false),
     [source, setSource] = useState(""),
     [, setTick] = useState(0),
@@ -371,16 +387,19 @@ export default function Editor({
     parentId !== (page.ParentPageId ?? null) ||
     template !== (page.TemplateType || "blank") ||
     Boolean(changeNote);
+  useLayoutEffect(() => {
+    onStateChange({ dirty, busy });
+  }, [dirty, busy, onStateChange]);
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (dirty) {
+      if (dirty || busy) {
         event.preventDefault();
         event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  }, [dirty, busy]);
   useEffect(() => {
     // Changing editability is UI state, not a document edit.
     editor?.setEditable(!busy && !sourceMode, false);
@@ -407,10 +426,6 @@ export default function Editor({
         .finally(() => setAttachmentLoading(false));
     }
   }, [panel, basePage.Id]);
-  function close() {
-    if (!busy && (!dirty || window.confirm("Discard your unsaved changes?")))
-      onCancel();
-  }
   function open(next: Panel) {
     if (!editor || sourceMode) return;
     if (panel === next) {
@@ -495,15 +510,21 @@ export default function Editor({
   }
   function chooseTemplate(key: string) {
     if (!editor) return;
-    if (
-      editor.getText().trim() &&
-      !window.confirm("Replace the current article body with this template?")
-    )
-      return;
-    setTemplate(key);
-    editor.commands.setContent(toEditorHTML(templates[key].body));
-    setSource(templates[key].body);
-    setChanged(true);
+    const apply = () => {
+      setTemplate(key);
+      editor.commands.setContent(toEditorHTML(templates[key].body));
+      setSource(templates[key].body);
+      setChanged(true);
+    };
+    if (editor.getText().trim()) {
+      setConfirmation({
+        title: "Replace the page content?",
+        message:
+          "This template will replace the current article body. Your title and page details will stay the same.",
+        actionLabel: "Use template",
+        action: apply,
+      });
+    } else apply();
   }
   function switchSource() {
     if (!editor) return;
@@ -511,6 +532,7 @@ export default function Editor({
       editor.commands.setContent(toEditorHTML(source));
       setSourceMode(false);
       setChanged(true);
+      setPanel(null);
     } else {
       if (
         pending.some((image) => editor.getHTML().includes(image.previewUrl))
@@ -521,16 +543,18 @@ export default function Editor({
         setPanel(null);
         return;
       }
-      if (
-        !window.confirm(
-          "Markdown source keeps headings, lists, tables, links, images, and code. Some visual formatting may be simplified when you return. Continue?",
-        )
-      )
-        return;
-      setSource(toMarkdown(serializeContent(editor.getHTML())));
-      setSourceMode(true);
+      setPanel(null);
+      setConfirmation({
+        title: "Switch to Markdown source?",
+        message:
+          "Markdown keeps headings, lists, tables, links, images, and code. Some visual formatting may be simplified when you return to the editor.",
+        actionLabel: "Switch to source",
+        action: () => {
+          setSource(toMarkdown(serializeContent(editor.getHTML())));
+          setSourceMode(true);
+        },
+      });
     }
-    setPanel(null);
   }
   async function downloadRecovery() {
     if (!editor || busy) return;
@@ -712,15 +736,20 @@ export default function Editor({
     ? String(editor.getAttributes("heading").level)
     : "paragraph";
   return (
-    <Modal
-      title={basePage.Id ? "Edit page" : "Create page"}
-      onClose={close}
-      wide
-    >
+    <>
       <section
         className="rich-editor"
+        aria-label={basePage.Id ? "Edit page" : "Create page"}
         aria-busy={busy}
         onKeyDownCapture={(event) => {
+          // SharePoint can wrap this inline workspace in an ASP.NET form.
+          if (
+            event.key === "Enter" &&
+            event.target instanceof HTMLInputElement &&
+            event.target.type !== "file"
+          ) {
+            event.preventDefault();
+          }
           if (event.key === "Escape" && panel) {
             event.preventDefault();
             event.stopPropagation();
@@ -729,6 +758,46 @@ export default function Editor({
           }
         }}
       >
+        <header className="rich-page-actions">
+          <div className="rich-edit-context">
+            <FileEdit size={16} />
+            <span>{basePage.Id ? "Editing page" : "New page"}</span>
+          </div>
+          <div className="rich-page-actions-right">
+            <button
+              type="button"
+              className="button rich-close-editor"
+              disabled={busy}
+              onClick={onCancel}
+              aria-label="Close editor"
+            >
+              Close
+            </button>
+            <div className="rich-save-actions">
+              <button
+                type="button"
+                className="button"
+                disabled={busy || retryBlocked}
+                onClick={() => save("Draft")}
+              >
+                Save draft
+              </button>
+              <button
+                type="button"
+                className="button primary"
+                disabled={busy || retryBlocked}
+                onClick={() => save("Published")}
+              >
+                <Check size={16} />
+                {busy
+                  ? "Saving…"
+                  : basePage.Status === "Published"
+                    ? "Save changes"
+                    : "Publish page"}
+              </button>
+            </div>
+          </div>
+        </header>
         <div className="rich-document-top">
           <div className="rich-location">
             <span className="rich-draft-label">
@@ -1629,31 +1698,33 @@ export default function Editor({
                 : ""}
             </span>
           </div>
-          <div className="rich-save-actions">
+        </footer>
+      </section>
+      {confirmation && (
+        <Modal title={confirmation.title} onClose={() => setConfirmation(null)}>
+          <p className="discard-description">{confirmation.message}</p>
+          <div className="button-row discard-actions">
             <button
               type="button"
               className="button"
-              disabled={busy || retryBlocked}
-              onClick={() => save("Draft")}
+              onClick={() => setConfirmation(null)}
             >
-              Save draft
+              Cancel
             </button>
             <button
               type="button"
               className="button primary"
-              disabled={busy || retryBlocked}
-              onClick={() => save("Published")}
+              onClick={() => {
+                const action = confirmation.action;
+                setConfirmation(null);
+                action();
+              }}
             >
-              <Check size={16} />
-              {busy
-                ? "Saving…"
-                : basePage.Status === "Published"
-                  ? "Save changes"
-                  : "Publish page"}
+              {confirmation.actionLabel}
             </button>
           </div>
-        </footer>
-      </section>
-    </Modal>
+        </Modal>
+      )}
+    </>
   );
 }

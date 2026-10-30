@@ -128,6 +128,48 @@
   background: var(--line);
   margin: 5px 7px;
 }
+.reader-menu-items .reader-delete-action,
+.reader-menu-items .reader-delete-action svg {
+  color: var(--rose);
+}
+.reader-menu-items .reader-delete-action:hover {
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+}
+.delete-page-confirmation > p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.delete-page-confirmation > .delete-page-title {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.delete-page-children {
+  margin: 18px 0;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  line-height: 1.6;
+}
+.delete-page-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+.delete-page-actions .delete-page-button {
+  background: #b82e43;
+  border-color: #b82e43;
+  color: #fff;
+}
+.delete-page-actions .delete-page-button:hover:not(:disabled) {
+  background: #9e2538;
+  border-color: #9e2538;
+}
 .article-view .reader-layout {
   grid-template-columns: minmax(0, 1fr) 185px;
   gap: 30px;

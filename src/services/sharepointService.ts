@@ -9,6 +9,11 @@ import type {
 } from "../types";
 import { createSeed } from "../data/seed";
 import { fieldXml, listSchema, type ListKey } from "./schema";
+import {
+  inspectGroupAccess,
+  repairGroupAccess,
+  type GroupAccessReport,
+} from "./groupAccess";
 
 declare global {
   interface Window {
@@ -38,6 +43,14 @@ export class SharePointError extends Error {
   ) {
     super(message);
     this.name = "SharePointError";
+  }
+}
+/** A recycle request may have completed even when its response was lost. */
+export class PageDeletionError extends Error {
+  readonly retryBlocked = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "PageDeletionError";
   }
 }
 export interface ServiceContext {
@@ -290,7 +303,7 @@ export class SharePointClient {
     return this.names.get(key)!;
   }
 }
-type LocalData = ReturnType<typeof createSeed>;
+type LocalData = ReturnType<typeof createSeed> & { nextPageId?: number };
 function localData(): LocalData {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
@@ -326,6 +339,13 @@ function persist(data: LocalData) {
 }
 const nextId = (rows: { Id: number }[]) =>
   Math.max(0, ...rows.map((p) => p.Id)) + 1;
+const nextLocalPageId = (data: LocalData) =>
+  Math.max(
+    Number.isSafeInteger(data.nextPageId) && Number(data.nextPageId) > 0
+      ? data.nextPageId!
+      : 1,
+    nextId(data.pages),
+  );
 const parseTags = (tags: unknown): string[] => {
   if (Array.isArray(tags)) return tags.filter((t) => typeof t === "string");
   try {
@@ -345,6 +365,10 @@ function pageFrom(raw: unknown): Page {
   };
   return {
     ...item,
+    AuthorId:
+      Number.isSafeInteger(item.AuthorId) && Number(item.AuthorId) > 0
+        ? item.AuthorId
+        : undefined,
     ParentPageId: item.ParentPageId || null,
     Tags: parseTags(item.Tags),
     Content: item.Content || "",
@@ -403,6 +427,91 @@ export class KnowledgeService {
         throw error;
       }));
   }
+  async currentUserIdentity(): Promise<{ Id: number; Title: string }> {
+    this.assertInitialized();
+    if (!this.client) return { Id: 1, Title: "Demo Editor" };
+    // Do not cache ownership evidence or accept an editor-supplied display name.
+    const user = unwrap<{ Id?: number; Title?: string }>(
+      await this.client.get("/_api/web/currentuser?$select=Id,Title"),
+    );
+    if (!Number.isSafeInteger(user?.Id) || Number(user.Id) <= 0)
+      throw new Error("SharePoint could not verify your user identity.");
+    return { Id: user.Id!, Title: user.Title || "SharePoint user" };
+  }
+  private async pageCreator(pageId: number): Promise<number | undefined> {
+    const page = this.client
+      ? unwrap<{ Id?: number; AuthorId?: number }>(
+          await this.client.get(
+            `${await this.client.resolve("Pages")}/items(${id(pageId)})?$select=Id,AuthorId`,
+          ),
+        )
+      : localData().pages.find((candidate) => candidate.Id === id(pageId));
+    if (!page || page.Id !== pageId)
+      throw new Error("The page no longer exists. Refresh the workspace.");
+    return Number.isSafeInteger(page.AuthorId) && Number(page.AuthorId) > 0
+      ? page.AuthorId
+      : undefined;
+  }
+  async canDeletePage(pageId: number): Promise<boolean> {
+    try {
+      this.assertInitialized();
+      id(pageId);
+      const user = await this.currentUserIdentity();
+      return (await this.pageCreator(pageId)) === user.Id;
+    } catch {
+      return false;
+    }
+  }
+  async deletePage(pageId: number): Promise<void> {
+    this.assertInitialized();
+    id(pageId);
+    const user = await this.currentUserIdentity();
+    if ((await this.pageCreator(pageId)) !== user.Id)
+      throw new Error("Only the original creator can delete this page.");
+    if (!this.client) {
+      const data = localData();
+      // Reread local state immediately before the mutation; do not trust UI data.
+      const page = data.pages.find((candidate) => candidate.Id === pageId);
+      if (!page || page.AuthorId !== user.Id)
+        throw new Error("Only the original creator can delete this page.");
+      if (data.pages.some((candidate) => candidate.ParentPageId === pageId))
+        throw new Error(
+          "Move or delete this page's child pages before deleting it. Child pages are never deleted automatically.",
+        );
+      // Preserve the high-water mark so retained revisions/comments cannot be
+      // attached to a future page that happens to reuse the recycled ID.
+      data.nextPageId = nextLocalPageId(data);
+      data.pages = data.pages.filter((candidate) => candidate.Id !== pageId);
+      // Related data is retained, matching SharePoint recycle/restore behavior.
+      persist(data);
+      return;
+    }
+    const path = await this.client.resolve("Pages");
+    const children = await this.client.collection<{ Id: number }>(
+      `${path}/items?$select=Id&$filter=ParentPageId eq ${pageId}&$top=1`,
+    );
+    if (children.length)
+      throw new Error(
+        "Move or delete this page's child pages before deleting it. Child pages are never deleted automatically.",
+      );
+    // Recycle keeps the item and its attachments recoverable. SharePoint does
+    // not document an atomic ETag/child constraint for recycle(), so this is a
+    // fresh application check, not a cross-list transaction or security ACL.
+    // The server still enforces the user's actual list/item permissions.
+    try {
+      await this.client.write(`${path}/items(${pageId})/recycle()`);
+    } catch (error) {
+      if (
+        error instanceof SharePointError &&
+        error.status < 500 &&
+        error.status !== 408
+      )
+        throw error;
+      throw new PageDeletionError(
+        `The delete result could not be confirmed. Refresh the workspace and check the SharePoint recycle bin before trying again. ${error instanceof Error ? error.message : ""}`,
+      );
+    }
+  }
   private async sitePermissionBits(): Promise<bigint> {
     if (!this.client)
       throw new Error("SharePoint site permissions are unavailable.");
@@ -433,6 +542,22 @@ export class KnowledgeService {
     } catch {
       return false;
     }
+  }
+  async checkGroupAccess(): Promise<GroupAccessReport> {
+    this.assertInitialized();
+    if (!this.client || !(await this.canManageWorkspace()))
+      throw new Error(
+        "A verified SharePoint site owner must check workspace group access.",
+      );
+    return inspectGroupAccess(this.client);
+  }
+  async repairGroupAccess(): Promise<GroupAccessReport> {
+    this.assertInitialized();
+    if (!this.client || !(await this.canManageWorkspace()))
+      throw new Error(
+        "A verified SharePoint site owner must repair workspace group access.",
+      );
+    return repairGroupAccess(this.client, () => this.canManageWorkspace());
   }
   async getSpaces(): Promise<Space[]> {
     this.assertInitialized();
@@ -553,6 +678,8 @@ export class KnowledgeService {
       IsPinned: input.IsPinned ?? existing?.IsPinned ?? false,
       TemplateType: input.TemplateType ?? existing?.TemplateType ?? "blank",
       VersionCount: (existing?.VersionCount ?? 0) + 1,
+      AuthorId:
+        existing?.AuthorId ?? (!this.client && !existing ? 1 : undefined),
       AuthorName: existing?.AuthorName ?? user,
       LastEditorName: user,
       Modified: now,
@@ -575,7 +702,10 @@ export class KnowledgeService {
           "This page changed since you opened it. Reload before saving.",
           412,
         );
-      page.Id ||= nextId(data.pages);
+      if (!page.Id) {
+        page.Id = nextLocalPageId(data);
+        data.nextPageId = page.Id + 1;
+      }
       page.etag = `"${page.VersionCount}"`;
       data.pages = data.pages.filter((p) => p.Id !== page.Id).concat(page);
       data.versions.push({ ...version(page.Id), Id: nextId(data.versions) });
@@ -588,6 +718,7 @@ export class KnowledgeService {
       Created: _created,
       Modified: _modified,
       etag: _etag,
+      AuthorId: _authorId,
       ...fields
     } = page;
     const payload = { ...fields, Tags: JSON.stringify(page.Tags) };

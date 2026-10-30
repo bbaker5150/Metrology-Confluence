@@ -14,7 +14,7 @@ Preview the redesigned [home](docs/previews/home-light.webp), [dark theme](docs/
 - An Insert menu and `/` on an empty line for tables, code blocks, callouts, dividers, symbols, emoji, and images. Secondary formatting includes strikethrough, highlighting, inline code, subscript, superscript, and text alignment.
 - Images from upload, paste, drag and drop, a URL, or existing page attachments, with description and width controls. Code blocks have a language selector; the reader adds syntax highlighting and copy controls.
 - Article breadcrumbs, metadata, heading navigation, code copy, attachments, comments, Markdown export, and print/PDF layout.
-- Revision snapshots with preview and restore; a restored revision becomes a new saved version.
+- Revision snapshots with preview and restore; a restored revision becomes a new saved version. Creators can delete leaf pages through the app after confirmation.
 - Light/dark suite themes, the shared MetSoft logo, a consolidated Create menu, a quieter article action bar, responsive navigation, and Workspace settings.
 - Seeded browser-local demo storage for development; SharePoint REST v1 and Lists for deployment.
 
@@ -22,11 +22,11 @@ Preview the redesigned [home](docs/previews/home-light.webp), [dark theme](docs/
 
 Use **Create → Space** to add a team or topic, then **Create → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recent, Pinned, and My drafts provide quick ways back to useful content. Search is available in the top bar or with `Ctrl+K` / `Cmd+K`.
 
-Pages open in a reading view with a clear **Edit page** action. **More page actions** contains version history, copying a page link, Markdown download, and print/PDF. Pinning remains a separate toggle. Site connection and list provisioning live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
+Pages open in a reading view with a clear **Edit page** action. **More page actions** contains version history, copying a page link, Markdown download, print/PDF, and **Delete page** for the original creator. Pinning remains a separate toggle. Site connection, list provisioning, and team access checks live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
 
-The editor opens as a visual document. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
+The visual editor occupies the main document area, keeping the workspace sidebar available. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
 
-Use **Save draft**, **Publish page**, or **Save changes** to persist your edits. The footer shows unsaved changes and pending image uploads. There is **no automatic saving to SharePoint and no real-time collaborative editing**. Closing a changed editor or leaving the page prompts before discarding work. The optional **More formatting → Markdown source** mode warns that some visual formatting can be simplified during conversion.
+Use **Save draft**, **Publish page**, or **Save changes** to persist your edits. The footer shows unsaved changes and pending image uploads. There is **no automatic saving to SharePoint and no real-time collaborative editing**. Navigating elsewhere in the app with unsaved changes opens an in-app discard dialog; a browser navigation guard also runs where the host supports it. Sandboxed hosts may suppress the browser's native leave prompt. Replacing existing content with a template and switching to **More formatting → Markdown source** use in-app confirmation dialogs. Source conversion can simplify some visual formatting.
 
 ## Local development
 
@@ -69,7 +69,10 @@ npm run test:browser
    ```
 
 5. As a site owner with **Manage Lists**, open **Workspace settings**, check readiness, and provision missing lists and columns. Alternatively use the PowerShell helper below.
-6. Use **Create → Space**, then **Create → Page** for production content. Demo content is not automatically copied into production.
+6. In **Workspace settings → Team access**, select **Check team access**. If needed, select **Repair team access**, review the proposed scope, and choose **Apply shared access**. This gives the existing **Metrology App User** group shared access to this app's four lists and existing items with separate permissions. Members should refresh after repair completes. See the permission details below.
+7. Use **Create → Space**, then **Create → Page** for production content. Demo content is not automatically copied into production.
+
+Building or publishing this repository does **not** change permissions in your tenant. For an existing deployment, an owner must upload the new HTML and run the Team access steps above. The schema provisioning helper does not grant team access.
 
 **Hosting depends on SharePoint policy.** SharePoint Online often downloads `.html` files or blocks custom scripts instead of executing them. Uploading an HTML file does not itself establish a runnable application. Use an organization-approved host, such as a permitted classic page/embedding solution or the same trusted HTML host used for the sibling applications. A modern Script Editor/SPFx wrapper or tenant policy change may be needed; this repository does not install one or change tenant policies. Cross-origin or opaque sandbox frames cannot reuse the site's REST session. A Content Security Policy that forbids inline scripts is incompatible with this single-file distribution.
 
@@ -114,9 +117,27 @@ The helper uses the same canonical titles, aliases, fields, digest handling, and
 
 ## Data, permissions, and editing
 
-The browser uses the current SharePoint login and credentialed REST requests. There is no secret in the HTML, no custom backend, and no application service account. SharePoint list and item permissions remain the authorization boundary. Give readers access to all four app lists; contributors need the relevant item and attachment permissions; only administrators should provision schema.
+The browser uses the current SharePoint login and credentialed REST requests. There is no secret in the HTML, no custom backend, and no application service account. SharePoint list and item permissions remain the authorization boundary. Team members need access to all four app lists, including the relevant item and attachment permissions; only administrators should provision schema or repair access.
 
 Workspace settings uses the same owner-level permission rule as Modernization Tracker: a SharePoint site collection administrator, or a user with effective **Manage Permissions** access on the current site. Checking effective permissions supports inherited and nested security-group grants; list-level permissions and **Manage Lists** alone do not show the settings. Both the sidebar entry and the error-page shortcut remain hidden until this check succeeds. Failed or unknown checks and local/demo sessions do not expose settings. Application provisioning rechecks owner access and additionally requires **Manage Lists**; SharePoint still enforces the actual REST permissions. When automatic site detection is unavailable, an owner can supply the documented `siteUrl` query parameter to establish the connection.
+
+### Shared team access
+
+**Workspace settings → Team access** inspects the exact existing SharePoint group **Metrology App User**, all four resolved app lists, and every existing item with unique permissions. Repair requires verified owner access plus site-level **Manage Permissions** and **Manage Lists**. It uses the site's built-in Contribute permission level, rejects an unavailable or unsafe modified role, and does not create a substitute group or change group membership.
+
+After the owner reviews and selects **Apply shared access**, repair grants Contribute where missing, sets `ReadSecurity = 1` and `WriteSecurity = 1` for shared reading and editing, and sets `DraftVersionVisibility = 0` so team readers can see shared drafts. If list inheritance must be broken to add the grant, existing assignments are copied and child scopes are retained. Existing Owners access, other grants, and content-approval settings are preserved. Changes apply only to the four app lists and existing unique item scopes; they do not grant site-wide access or access to the host page or HTML file. The app verifies the result. If repair stops partway, use **Check team access** again before retrying.
+
+Membership in a shared group does not automatically give that group rights on every new app list. The inspected [Modernization Tracker permission service](https://github.com/bbaker5150/NPSL-Modernization-Tracker/blob/5f0638505f53aeea8eeb3fccb257d7542afed242/src/lib/trackerPermissions.js) applies grants to Tracker project, folder, and item scopes (`baselineGrants`, `applyScope`, and their callers); it does not configure these Confluence lists. Missing grants on the new lists are therefore a plausible cause when a member can use Tracker but cannot create a space here. Team access checks the current tenant state instead of assuming that diagnosis. Its implementation is [`src/services/groupAccess.ts`](src/services/groupAccess.ts).
+
+### Deleting pages
+
+Inside this app, **Delete page** is available only when SharePoint's native `AuthorId` matches the current user's numeric ID. The service fetches both again before deleting; editable author names are not ownership evidence, and site owners have no app-level override. A page with any child page, including a Draft or Archived child, cannot be deleted. Move or delete children first; there is no automatic recursive deletion. The child check and recycle request are separate SharePoint operations, not an atomic hierarchy constraint.
+
+After confirmation, SharePoint pages and their attachments move to the SharePoint recycle bin. Separate Versions and Comments records remain available for a restored page. Local/demo deletion removes the page from that browser's workspace and has no undo or recycle bin. If a deletion response is uncertain, refresh and check the SharePoint recycle bin before trying again.
+
+**Creator-only deletion is an application rule, not a SharePoint permission restriction.** Standard Contribute includes Delete Items, so members may delete other authors' content through native SharePoint or direct REST requests outside this app. Team access repair does not establish backend creator-only deletion security.
+
+### Content and concurrent edits
 
 **Draft and Archived are workflow statuses, not security boundaries.** Users who can read an item through SharePoint can read its content regardless of its status. Use SharePoint permissions or a separate site for confidential material. Author/editor display-name fields are labels; SharePoint's built-in audit fields and permissions establish actual identity and access.
 
@@ -176,6 +197,9 @@ https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/inde
 | 401/403 or digest failure | Current session, same-origin host, site URL, and permissions; sign in again if needed |
 | Lists or columns missing | A site owner with Manage Lists can run Workspace settings |
 | Workspace settings is not shown | It is owner-only; local/demo mode, non-owner access, or an unsuccessful owner check keeps it hidden |
+| A Metrology App User member can use Tracker but cannot read, create, or edit here | An owner must upload the current HTML, then run Workspace settings → Team access → Check team access → Repair team access → review Apply shared access. Tracker's scoped grants do not configure these app lists; refresh after repair. |
+| Team access is ready but the app page cannot be opened | The repair does not grant access to the host page, HTML file, library, or site; check those permissions separately |
+| Delete page is missing or blocked | Only the native original creator can delete through the app. All child pages must be moved or deleted first; SharePoint must also permit deletion. |
 | Duplicate-list alias error | Resolve canonical/legacy duplicates; the app deliberately does not select one |
 | Save conflict | Another edit changed the item; reload the latest article before editing again |
 | Image save partly completed | Keep the editor open and follow its recovery message; reopen the latest page before retrying an uncertain save |
