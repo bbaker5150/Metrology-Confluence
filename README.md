@@ -48,7 +48,7 @@ npm run verify
 
 `npm run build` creates `dist/index.html` and verifies that the distribution contains exactly one file, inline JavaScript/CSS, and no static external asset references. Run the verifier before adding checksums or other files to `dist`.
 
-Browser checks include the final bundle mounted inside a simulated SharePoint ASP.NET form, with mocked REST responses for first-space creation and permission failures. Action buttons explicitly avoid submitting the host form, and dialogs render outside it. These checks do not replace validation on your live tenant.
+Browser checks include the final bundle mounted inside a simulated SharePoint ASP.NET form and an iframe that allows scripts but blocks native form submission, with mocked REST responses for first-space creation and permission failures. Save actions run directly from their buttons, and dialogs render outside the host form. Enter in single-line fields also invokes the action directly; Enter in a comment or description remains a newline. These checks do not replace validation on your live tenant.
 
 The browser smoke test uses the final compiled artifact:
 
@@ -169,6 +169,7 @@ https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/inde
 | Symptom | Check |
 | --- | --- |
 | HTML downloads or shows as text | Approved SharePoint host, library handling, and tenant custom-script policy |
+| Create-space dialog opens but its button does nothing | Replace older HTML with the current release; earlier builds relied on native form submission, which sandboxed embeds can block. The current build does not require the iframe's `allow-forms` permission. |
 | Local mode appears on SharePoint | Page context is absent; use the explicit same-origin `siteUrl` and reload |
 | 401/403 or digest failure | Current session, same-origin host, site URL, and permissions; sign in again if needed |
 | Lists or columns missing | Run Workspace settings as a user with Manage Lists |

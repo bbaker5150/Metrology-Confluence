@@ -95,6 +95,7 @@ export default function ArticleReader({
   const fileInput = useRef<HTMLInputElement>(null);
   const articleContent = useRef<HTMLDivElement>(null);
   const actionMenu = useRef<HTMLDetailsElement>(null);
+  const commentPending = useRef(false);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (!actionMenu.current?.contains(event.target as Node))
@@ -204,6 +205,21 @@ export default function ArticleReader({
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function postComment() {
+    const body = comment.trim();
+    if (busy || commentPending.current || !body) return;
+    commentPending.current = true;
+    try {
+      await run(async () => {
+        const added = await service.addComment(page.Id, body);
+        setComments((current) => [...current, added]);
+        setComment("");
+        onToast("Comment added.");
+      });
+    } finally {
+      commentPending.current = false;
     }
   }
   function exportMarkdown() {
@@ -538,16 +554,7 @@ export default function ArticleReader({
               onSubmit={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (comment.trim())
-                  void run(async () => {
-                    const added = await service.addComment(
-                      page.Id,
-                      comment.trim(),
-                    );
-                    setComments([...comments, added]);
-                    setComment("");
-                    onToast("Comment added.");
-                  });
+                void postComment();
               }}
             >
               <label className="visually-hidden" htmlFor="page-comment">
@@ -563,9 +570,15 @@ export default function ArticleReader({
                 maxLength={10000}
               />
               <button
-                type="submit"
+                type="button"
                 className="button primary small"
                 disabled={busy || !comment.trim()}
+                onClick={(event) => {
+                  // Sandboxed SharePoint hosts may block native form submission.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void postComment();
+                }}
               >
                 <Send size={14} />
                 Post comment

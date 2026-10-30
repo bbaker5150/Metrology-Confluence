@@ -1122,6 +1122,23 @@ function SetupDialog({
       setBusy(false);
     }
   };
+  const useSite = () => {
+    setError("");
+    try {
+      if (!site.trim())
+        throw new Error("Enter the SharePoint site's base URL first.");
+      const url = new URL(site.trim());
+      if (url.origin !== location.origin)
+        throw new Error(
+          "Open this HTML on the SharePoint origin first. Cross-origin connections are not supported.",
+        );
+      const current = new URL(location.href);
+      current.searchParams.set("siteUrl", url.href);
+      location.assign(current.href);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   useEffect(() => {
     void check();
   }, []);
@@ -1211,21 +1228,11 @@ function SetupDialog({
             : "Open this app on your SharePoint site to connect. If automatic detection is unavailable, enter the site’s base URL—not the page or HTML file address."}
         </p>
         <form
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            try {
-              const url = new URL(site);
-              if (url.origin !== location.origin)
-                throw new Error(
-                  "Open this HTML on the SharePoint origin first. Cross-origin connections are not supported.",
-                );
-              const current = new URL(location.href);
-              current.searchParams.set("siteUrl", url.href);
-              location.assign(current.href);
-            } catch (e) {
-              setError(String(e));
-            }
+            useSite();
           }}
         >
           <label>
@@ -1236,9 +1243,24 @@ function SetupDialog({
               placeholder="https://tenant.sharepoint.com/sites/Metrology"
               value={site}
               onChange={(e) => setSite(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!e.repeat) useSite();
+                }
+              }}
             />
           </label>
-          <button className="button" type="submit">
+          <button
+            className="button"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              useSite();
+            }}
+          >
             Use this site
           </button>
         </form>
@@ -1257,6 +1279,27 @@ function CreateSpace({
     [description, setDescription] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const createSpace = async () => {
+    if (submitting.current) return;
+    if (!title.trim()) {
+      setError("Enter a space name before creating the space.");
+      nameInput.current?.focus();
+      return;
+    }
+    submitting.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await onCreate(title.trim(), description.trim());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
   return (
     <Modal
       title="Create a space"
@@ -1265,29 +1308,31 @@ function CreateSpace({
       }}
     >
       <form
-        onSubmit={async (e) => {
+        noValidate
+        aria-busy={busy}
+        onSubmit={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (!title.trim()) return;
-          setBusy(true);
-          setError("");
-          try {
-            await onCreate(title.trim(), description.trim());
-          } catch (e) {
-            setError(String(e));
-          } finally {
-            setBusy(false);
-          }
+          void createSpace();
         }}
       >
         <label>
           Space name
           <input
+            ref={nameInput}
             autoFocus
             required
             maxLength={100}
+            disabled={busy}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!e.repeat) void createSpace();
+              }
+            }}
             placeholder="e.g. Metrology & Lab Ops"
           />
         </label>
@@ -1295,6 +1340,7 @@ function CreateSpace({
           Description
           <textarea
             rows={3}
+            disabled={busy}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What will your team share here?"
@@ -1315,9 +1361,16 @@ function CreateSpace({
             Cancel
           </button>
           <button
-            type="submit"
+            type="button"
             className="button primary"
-            disabled={busy || !title.trim()}
+            disabled={busy}
+            onClick={(e) => {
+              // Sandboxed SharePoint embeds may allow scripts but forbid native
+              // form submission, suppressing onSubmit before React receives it.
+              e.preventDefault();
+              e.stopPropagation();
+              void createSpace();
+            }}
           >
             {busy ? "Creating…" : "Create space"}
           </button>
