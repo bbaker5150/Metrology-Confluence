@@ -221,7 +221,7 @@ export default function ArticleReader({
         {ancestors.map((parent) => (
           <span key={parent.Id}>
             <ChevronRight size={13} />
-            <button onClick={() => onNavigate(parent.Id)}>
+            <button type="button" onClick={() => onNavigate(parent.Id)}>
               {parent.Title}
             </button>
           </span>
@@ -263,6 +263,7 @@ export default function ArticleReader({
             {readingMinutes} min read
           </span>
           <button
+            type="button"
             className="version-badge"
             onClick={() => setHistoryOpen(true)}
           >
@@ -279,6 +280,7 @@ export default function ArticleReader({
           </div>
           <div className="button-row">
             <button
+              type="button"
               className={`icon-button ${page.IsPinned ? "active" : ""}`}
               aria-label={page.IsPinned ? "Unpin page" : "Pin page"}
               title={page.IsPinned ? "Unpin page" : "Pin page"}
@@ -301,6 +303,7 @@ export default function ArticleReader({
               <Pin size={17} />
             </button>
             <button
+              type="button"
               className="icon-button"
               title="Version history"
               aria-label="Version history"
@@ -309,6 +312,7 @@ export default function ArticleReader({
               <History size={17} />
             </button>
             <button
+              type="button"
               className="icon-button"
               title="Download Markdown"
               aria-label="Download Markdown"
@@ -317,6 +321,7 @@ export default function ArticleReader({
               <Download size={17} />
             </button>
             <button
+              type="button"
               className="icon-button"
               title="Print or save PDF"
               aria-label="Print or save PDF"
@@ -324,7 +329,7 @@ export default function ArticleReader({
             >
               <Printer size={17} />
             </button>
-            <button className="button primary" onClick={onEdit}>
+            <button type="button" className="button primary" onClick={onEdit}>
               <Edit3 size={15} />
               Edit page
             </button>
@@ -348,6 +353,7 @@ export default function ArticleReader({
               <h2>In this section</h2>
               {children.map((child) => (
                 <button
+                  type="button"
                   className="child-page-link"
                   key={child.Id}
                   onClick={() => onNavigate(child.Id)}
@@ -366,6 +372,7 @@ export default function ArticleReader({
                 Attachments <span className="count">{attachments.length}</span>
               </h2>
               <button
+                type="button"
                 className="button small"
                 disabled={busy || loading}
                 onClick={() => fileInput.current?.click()}
@@ -433,6 +440,7 @@ export default function ArticleReader({
                     )}
                     {isImage(attachment) && (
                       <button
+                        type="button"
                         className="text-button"
                         onClick={() => copyImage(attachment)}
                       >
@@ -461,6 +469,7 @@ export default function ArticleReader({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 if (comment.trim())
                   void run(async () => {
                     const added = await service.addComment(
@@ -486,6 +495,7 @@ export default function ArticleReader({
                 maxLength={10000}
               />
               <button
+                type="submit"
                 className="button primary small"
                 disabled={busy || !comment.trim()}
               >
@@ -593,6 +603,7 @@ export default function ArticleReader({
                 .sort((a, b) => b.VersionNumber - a.VersionNumber)
                 .map((version) => (
                   <button
+                    type="button"
                     className={`version-item ${preview?.Id === version.Id ? "active" : ""}`}
                     key={version.Id}
                     onClick={() => setPreview(version)}
@@ -616,6 +627,7 @@ export default function ArticleReader({
                   <div className="section-heading">
                     <h3>{preview.TitleSnapshot}</h3>
                     <button
+                      type="button"
                       className="button small"
                       disabled={
                         busy || preview.VersionNumber === page.VersionCount

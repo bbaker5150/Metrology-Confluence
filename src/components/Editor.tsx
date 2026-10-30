@@ -448,6 +448,7 @@ export default function Editor({
             </label>
             <div className="button-row">
               <button
+                type="button"
                 className="button"
                 disabled={busy}
                 onClick={() => save("Draft")}
@@ -456,6 +457,7 @@ export default function Editor({
                 {busy ? "Saving…" : "Save draft"}
               </button>
               <button
+                type="button"
                 className="button primary"
                 disabled={busy}
                 onClick={() => save("Published")}

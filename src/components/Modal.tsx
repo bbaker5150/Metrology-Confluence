@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 export default function Modal({
   title,
   onClose,
@@ -25,7 +26,7 @@ export default function Modal({
         el.querySelectorAll<HTMLElement>(
           'button,input,textarea,select,a[href],[tabindex="0"]',
         ),
-      ).filter((x) => !x.hasAttribute("disabled") && x.offsetParent !== null);
+      ).filter((x) => !x.matches(":disabled") && x.offsetParent !== null);
     (
       el.querySelector<HTMLElement>('input:not([type="file"]),textarea') ||
       focusable()[0] ||
@@ -60,7 +61,8 @@ export default function Modal({
       previous?.focus();
     };
   }, []);
-  return (
+  // Keep dialogs outside SharePoint’s surrounding ASP.NET form and stacking contexts.
+  return createPortal(
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
@@ -78,6 +80,7 @@ export default function Modal({
         <header className="modal-header">
           <h2>{title}</h2>
           <button
+            type="button"
             className="icon-button"
             onClick={onClose}
             aria-label="Close dialog"
@@ -87,6 +90,7 @@ export default function Modal({
         </header>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

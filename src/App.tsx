@@ -205,6 +205,7 @@ export default function App() {
         <nav>
           {navItems.map(({ key, label, icon: Icon }) => (
             <button
+              type="button"
               key={key}
               className={`nav-item ${view === key && !pageId ? "active" : ""}`}
               onClick={() => go(key)}
@@ -225,7 +226,11 @@ export default function App() {
         </nav>
         <div className="sidebar-caption caption-with-action">
           SPACES
-          <button aria-label="Create space" onClick={() => setNewSpace(true)}>
+          <button
+            type="button"
+            aria-label="Create space"
+            onClick={() => setNewSpace(true)}
+          >
             <Plus size={16} />
           </button>
         </div>
@@ -233,6 +238,7 @@ export default function App() {
           {spaces.map((s) => (
             <div key={s.Id}>
               <button
+                type="button"
                 className={`nav-item ${spaceId === s.Id && view === "space" && !pageId ? "active" : ""}`}
                 onClick={() => go("space", s.Id)}
               >
@@ -261,7 +267,11 @@ export default function App() {
               Metrology software suite<small>One place for what we know.</small>
             </span>
           </div>
-          <button className="nav-item" onClick={() => setAdmin(true)}>
+          <button
+            type="button"
+            className="nav-item"
+            onClick={() => setAdmin(true)}
+          >
             <Settings size={17} />
             Admin / Setup
           </button>
@@ -288,6 +298,7 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <button
+            type="button"
             className="icon-button mobile-menu"
             aria-label="Open navigation"
             onClick={() => setMobile(true)}
@@ -307,12 +318,17 @@ export default function App() {
             </strong>
           </div>
           <div className="topbar-actions">
-            <button className="search-trigger" onClick={() => setSearch(true)}>
+            <button
+              type="button"
+              className="search-trigger"
+              onClick={() => setSearch(true)}
+            >
               <Search size={16} />
               <span>Search knowledge…</span>
               <kbd>⌘ K</kbd>
             </button>
             <button
+              type="button"
               className="icon-button"
               aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
               onClick={() => setTheme(theme === "light" ? "dark" : "light")}
@@ -320,6 +336,7 @@ export default function App() {
               {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
             </button>
             <button
+              type="button"
               className="button primary"
               onClick={() => create()}
               disabled={loading}
@@ -334,7 +351,7 @@ export default function App() {
             <div className="mode-banner">
               <span className="demo-dot" />
               Local demo · Changes are saved in this browser.
-              <button onClick={() => setAdmin(true)}>
+              <button type="button" onClick={() => setAdmin(true)}>
                 Connect to SharePoint <ArrowUpRight size={13} />
               </button>
             </div>
@@ -344,10 +361,15 @@ export default function App() {
               <h2>Couldn’t load this workspace</h2>
               <p>{error}</p>
               <div className="button-row">
-                <button className="button" onClick={() => void refresh()}>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => void refresh()}
+                >
                   Retry
                 </button>
                 <button
+                  type="button"
                   className="button primary"
                   onClick={() => setAdmin(true)}
                 >
@@ -375,7 +397,11 @@ export default function App() {
             <div className="empty-state">
               <h2>Page not found</h2>
               <p>This page may have moved or you may not have access.</p>
-              <button className="button" onClick={() => go("home")}>
+              <button
+                type="button"
+                className="button"
+                onClick={() => go("home")}
+              >
                 Back to all spaces
               </button>
             </div>
@@ -412,7 +438,11 @@ export default function App() {
                   </p>
                 </div>
                 {view !== "home" && (
-                  <button className="button" onClick={() => create()}>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => create()}
+                  >
                     <Plus size={16} />
                     New page
                   </button>
@@ -471,6 +501,7 @@ export default function App() {
                         .slice(0, 3)
                         .map((p, i) => (
                           <button
+                            type="button"
                             className={`featured-card feature-${i}`}
                             key={p.Id}
                             onClick={() => navigate(p.Id)}
@@ -512,6 +543,7 @@ export default function App() {
                     <div className="space-grid">
                       {spaces.map((s) => (
                         <button
+                          type="button"
                           className="space-card"
                           key={s.Id}
                           onClick={() => go("space", s.Id)}
@@ -563,6 +595,7 @@ export default function App() {
                       .slice(0, view === "home" ? 6 : undefined)
                       .map((p) => (
                         <button
+                          type="button"
                           key={p.Id}
                           className="page-row"
                           onClick={() => navigate(p.Id)}
@@ -591,6 +624,7 @@ export default function App() {
                         <h3>No pages here yet</h3>
                         <p>Create a page to start sharing knowledge.</p>
                         <button
+                          type="button"
                           className="button primary"
                           onClick={() => create()}
                         >
@@ -607,6 +641,7 @@ export default function App() {
                   <div className="tag-cloud">
                     {tags.map((t) => (
                       <button
+                        type="button"
                         className={`tag ${tag === t && view === "tag" ? "selected" : ""}`}
                         key={t}
                         onClick={() => {
@@ -626,7 +661,7 @@ export default function App() {
                     <span className="tip-icon">✦</span>
                     <h3>Make the next question easier.</h3>
                     <p>Turn a solved problem into a page your team can find.</p>
-                    <button onClick={() => create()}>
+                    <button type="button" onClick={() => create()}>
                       Share what you know <ArrowUpRight size={15} />
                     </button>
                   </div>
@@ -691,6 +726,7 @@ export default function App() {
           <CheckCircle2 size={18} />
           {toast}
           <button
+            type="button"
             onClick={() => setToast("")}
             aria-label="Dismiss notification"
           >
@@ -719,7 +755,7 @@ function SectionHeading({
         <h2>{title}</h2>
       </div>
       {action && (
-        <button className="text-button" onClick={onClick}>
+        <button type="button" className="text-button" onClick={onClick}>
           {action}
           <ArrowUpRight size={15} />
         </button>
@@ -748,6 +784,7 @@ function PageTree({
         <div className="tree-branch" key={p.Id}>
           <div className={`tree-row ${selected === p.Id ? "selected" : ""}`}>
             <button
+              type="button"
               className="tree-toggle"
               aria-label={`${collapsed.includes(p.Id) ? "Expand" : "Collapse"} ${p.Title}`}
               onClick={() =>
@@ -766,10 +803,15 @@ function PageTree({
                 <FileText size={12} />
               )}
             </button>
-            <button className="tree-title" onClick={() => onNavigate(p.Id)}>
+            <button
+              type="button"
+              className="tree-title"
+              onClick={() => onNavigate(p.Id)}
+            >
               {p.Title}
             </button>
             <button
+              type="button"
               className="tree-add"
               aria-label={`Create child page under ${p.Title}`}
               onClick={() => onCreate(p)}
@@ -918,6 +960,7 @@ function SearchDialog({
             );
             return (
               <button
+                type="button"
                 id={`search-result-${i}`}
                 key={p.Id}
                 className={`search-result ${selected === i ? "selected" : ""}`}
@@ -1022,10 +1065,16 @@ function SetupDialog({
         </p>
       )}
       <div className="button-row">
-        <button className="button" disabled={busy} onClick={() => void check()}>
+        <button
+          type="button"
+          className="button"
+          disabled={busy}
+          onClick={() => void check()}
+        >
           Check again
         </button>
         <button
+          type="button"
           className="button primary"
           disabled={busy || service.mode === "local"}
           onClick={async () => {
@@ -1055,6 +1104,7 @@ function SetupDialog({
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           try {
             const url = new URL(site);
             if (url.origin !== location.origin)
@@ -1107,6 +1157,7 @@ function CreateSpace({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          e.stopPropagation();
           if (!title.trim()) return;
           setBusy(true);
           setError("");
@@ -1153,7 +1204,11 @@ function CreateSpace({
           >
             Cancel
           </button>
-          <button className="button primary" disabled={busy || !title.trim()}>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={busy || !title.trim()}
+          >
             {busy ? "Creating…" : "Create space"}
           </button>
         </div>

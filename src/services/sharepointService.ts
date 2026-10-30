@@ -138,7 +138,8 @@ export class SharePointClient {
   private async send(url: string, options: RequestInit): Promise<unknown> {
     try {
       return await this.read(
-        await this.fetcher(url, {
+        // Native browser fetch requires the Window receiver, not this client instance.
+        await this.fetcher.call(globalThis, url, {
           ...options,
           credentials: "include",
           signal: AbortSignal.timeout(45000),

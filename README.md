@@ -34,6 +34,8 @@ npm run verify
 
 `npm run build` creates `dist/index.html` and verifies that the distribution contains exactly one file, inline JavaScript/CSS, and no static external asset references. Run the verifier before adding checksums or other files to `dist`.
 
+Browser checks include the final bundle mounted inside a simulated SharePoint ASP.NET form, with mocked REST responses for first-space creation and permission failures. Action buttons explicitly avoid submitting the host form, and dialogs render outside it. These checks do not replace validation on your live tenant.
+
 The browser smoke test uses the final compiled artifact:
 
 ```sh
