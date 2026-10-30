@@ -403,6 +403,37 @@ export class KnowledgeService {
         throw error;
       }));
   }
+  private async sitePermissionBits(): Promise<bigint> {
+    if (!this.client)
+      throw new Error("SharePoint site permissions are unavailable.");
+    const raw = unwrap<{
+      Low?: string | number;
+      EffectiveBasePermissions?: { Low?: string | number };
+    }>(await this.client.get("/_api/web/EffectiveBasePermissions"));
+    const low = (raw?.EffectiveBasePermissions ?? raw)?.Low;
+    if (
+      (typeof low !== "string" && typeof low !== "number") ||
+      !/^\d+$/.test(String(low)) ||
+      BigInt(low) > 4294967295n
+    )
+      throw new Error("SharePoint returned invalid site permissions.");
+    return BigInt(low);
+  }
+  async canManageWorkspace(): Promise<boolean> {
+    // Match the suite's owner definition using effective site permissions,
+    // which include inherited and nested security-group grants. Never infer
+    // ownership from a display name, Manage Lists alone, or local demo mode.
+    if (this.initializationError || !this.client) return false;
+    try {
+      const user = unwrap<{ IsSiteAdmin?: boolean }>(
+        await this.client.get("/_api/web/currentuser?$select=IsSiteAdmin"),
+      );
+      if (user?.IsSiteAdmin === true) return true;
+      return ((await this.sitePermissionBits()) & 33554432n) !== 0n;
+    } catch {
+      return false;
+    }
+  }
   async getSpaces(): Promise<Space[]> {
     this.assertInitialized();
     const spaces = this.client
@@ -777,18 +808,11 @@ export class KnowledgeService {
   }
   async provision(): Promise<void> {
     this.assertInitialized();
-    if (!this.client) {
-      localData();
-      return;
-    }
-    const raw = unwrap<{
-      Low?: string;
-      EffectiveBasePermissions?: { Low: string };
-    }>(await this.client.get("/_api/web/EffectiveBasePermissions"));
-    if (
-      (BigInt((raw.EffectiveBasePermissions ?? raw).Low ?? "0") & 2048n) ===
-      0n
-    )
+    // Reverify on every attempt so a previously visible settings dialog cannot
+    // retain provisioning access after SharePoint ownership is revoked.
+    if (!(await this.canManageWorkspace()) || !this.client)
+      throw new Error("Only a verified SharePoint site owner can run setup.");
+    if (((await this.sitePermissionBits()) & 2048n) === 0n)
       throw new Error(
         "A site owner with Manage Lists permission must run setup.",
       );

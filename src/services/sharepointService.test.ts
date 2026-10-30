@@ -152,8 +152,10 @@ describe("SharePoint REST transport", () => {
   });
   it("preflights native Title fields before making provisioning writes", async () => {
     const fetcher = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes("currentuser"))
+        return response({ IsSiteAdmin: false });
       if (String(url).includes("EffectiveBasePermissions"))
-        return response({ Low: "2048" });
+        return response({ Low: "33556480" });
       if (String(url).includes("KB_")) return response({}, 404);
       if (String(url).includes("/fields?")) return response({ value: [] });
       return response({ Id: "list", BaseTemplate: 100 });
@@ -184,13 +186,118 @@ describe("SharePoint REST transport", () => {
     expect(service.mode).toBe("sharepoint");
   });
   it("requires site-level Manage Lists before provisioning", async () => {
-    const fetcher = vi.fn(async () => response({ Low: "0" }));
+    const fetcher = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("currentuser")
+        ? response({ IsSiteAdmin: true })
+        : response({ Low: "0" }),
+    );
     const service = new KnowledgeService(
       { mode: "sharepoint", webUrl: "https://tenant.test/sites/lab" },
       fetcher as typeof fetch,
     );
     await expect(service.provision()).rejects.toThrow("Manage Lists");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("workspace owner verification", () => {
+  const context = {
+    mode: "sharepoint" as const,
+    webUrl: "https://tenant.test/sites/lab",
+  };
+  it("recognizes a site collection administrator from SharePoint", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request) =>
+      response({ d: { IsSiteAdmin: true } }),
+    );
+    const service = new KnowledgeService(context, fetcher as typeof fetch);
+    expect(await service.canManageWorkspace()).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0][0])).toContain(
+      "/_api/web/currentuser?$select=IsSiteAdmin",
+    );
+  });
+  it("recognizes effective site ownership without enumerating direct group members", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("currentuser")
+        ? response({ IsSiteAdmin: false })
+        : response({
+            d: { EffectiveBasePermissions: { Low: "33556480", High: "0" } },
+          }),
+    );
+    const service = new KnowledgeService(context, fetcher as typeof fetch);
+    expect(await service.canManageWorkspace()).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1][0])).toContain(
+      "/_api/web/EffectiveBasePermissions",
+    );
+  });
+  it.each(["0", "1", "2048", "2049"])(
+    "does not grant settings for non-owner permission mask %s",
+    async (low) => {
+      const fetcher = vi.fn(async (url: string | URL | Request) =>
+        String(url).includes("currentuser")
+          ? response({ IsSiteAdmin: false })
+          : response({ Low: low }),
+      );
+      const service = new KnowledgeService(context, fetcher as typeof fetch);
+      expect(await service.canManageWorkspace()).toBe(false);
+      await expect(service.provision()).rejects.toThrow(
+        "Only a verified SharePoint site owner",
+      );
+      expect(
+        (fetcher.mock.calls as unknown as [string, RequestInit][]).every(
+          ([, options]) => options.method === "GET",
+        ),
+      ).toBe(true);
+    },
+  );
+  it.each([undefined, "bad", "-1", "4294967296", true])(
+    "fails closed for malformed permission mask %s",
+    async (low) => {
+      const fetcher = vi.fn(async (url: string | URL | Request) =>
+        String(url).includes("currentuser")
+          ? response({ IsSiteAdmin: "true" })
+          : response({ Low: low }),
+      );
+      expect(
+        await new KnowledgeService(
+          context,
+          fetcher as typeof fetch,
+        ).canManageWorkspace(),
+      ).toBe(false);
+    },
+  );
+  it("fails closed when owner verification is unavailable", async () => {
+    const fetcher = vi.fn(async () => response({}, 403));
+    const service = new KnowledgeService(context, fetcher as typeof fetch);
+    expect(await service.canManageWorkspace()).toBe(false);
+    expect(service.mode).toBe("sharepoint");
+    await expect(service.provision()).rejects.toThrow("site owner");
+    expect(memory.size).toBe(0);
+  });
+  it("rechecks ownership before setup after an earlier successful check", async () => {
+    let low = "33556480";
+    const fetcher = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("currentuser")
+        ? response({ IsSiteAdmin: false })
+        : response({ Low: low }),
+    );
+    const service = new KnowledgeService(context, fetcher as typeof fetch);
+    expect(await service.canManageWorkspace()).toBe(true);
+    low = "2048";
+    await expect(service.provision()).rejects.toThrow("site owner");
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(
+      (fetcher.mock.calls as unknown as [string, RequestInit][]).every(
+        ([, options]) => options.method === "GET",
+      ),
+    ).toBe(true);
+  });
+  it("never grants site ownership to local/demo contexts", async () => {
+    const service = new KnowledgeService({ mode: "local", webUrl: "" });
+    expect(await service.canManageWorkspace()).toBe(false);
+    await expect(service.provision()).rejects.toThrow("site owner");
+    expect(memory.size).toBe(0);
   });
 });
 
@@ -225,12 +332,33 @@ describe("context and local persistence", () => {
       const service = new KnowledgeService();
       expect(service.mode).toBe("sharepoint");
       expect(service.initializationError?.message).toContain("same-origin");
+      expect(await service.canManageWorkspace()).toBe(false);
       await expect(
         Promise.all([service.getPages(), service.currentUser()]),
       ).rejects.toThrow("same-origin");
       await expect(service.createSpace("Test", "")).rejects.toThrow(
         "same-origin",
       );
+      expect(memory.size).toBe(0);
+    } finally {
+      Object.assign(window, { location: original });
+    }
+  });
+  it("does not infer ownership when SharePoint page context is absent", async () => {
+    const original = window.location;
+    Object.assign(window, {
+      location: {
+        hostname: "tenant.sharepoint.com",
+        origin: "https://tenant.sharepoint.com",
+        href: "https://tenant.sharepoint.com/sites/lab/SiteAssets/hub.html",
+        search: "",
+      },
+    });
+    try {
+      const service = new KnowledgeService();
+      expect(service.mode).toBe("local");
+      expect(await service.canManageWorkspace()).toBe(false);
+      await expect(service.provision()).rejects.toThrow("site owner");
       expect(memory.size).toBe(0);
     } finally {
       Object.assign(window, { location: original });

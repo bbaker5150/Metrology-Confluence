@@ -22,7 +22,7 @@ Preview the redesigned [home](docs/previews/home-light.webp), [dark theme](docs/
 
 Use **Create → Space** to add a team or topic, then **Create → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recent, Pinned, and My drafts provide quick ways back to useful content. Search is available in the top bar or with `Ctrl+K` / `Cmd+K`.
 
-Pages open in a reading view with a clear **Edit page** action. **More page actions** contains version history, copying a page link, Markdown download, and print/PDF. Pinning remains a separate toggle. Site connection and list provisioning live in **Workspace settings**.
+Pages open in a reading view with a clear **Edit page** action. **More page actions** contains version history, copying a page link, Markdown download, and print/PDF. Pinning remains a separate toggle. Site connection and list provisioning live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
 
 The editor opens as a visual document. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
 
@@ -68,7 +68,7 @@ npm run test:browser
    https://tenant.sharepoint.com/sites/Metrology/SiteAssets/index.html?siteUrl=https%3A%2F%2Ftenant.sharepoint.com%2Fsites%2FMetrology
    ```
 
-5. As a site owner or user with **Manage Lists**, open **Workspace settings**, check readiness, and provision missing lists and columns. Alternatively use the PowerShell helper below.
+5. As a site owner with **Manage Lists**, open **Workspace settings**, check readiness, and provision missing lists and columns. Alternatively use the PowerShell helper below.
 6. Use **Create → Space**, then **Create → Page** for production content. Demo content is not automatically copied into production.
 
 **Hosting depends on SharePoint policy.** SharePoint Online often downloads `.html` files or blocks custom scripts instead of executing them. Uploading an HTML file does not itself establish a runnable application. Use an organization-approved host, such as a permitted classic page/embedding solution or the same trusted HTML host used for the sibling applications. A modern Script Editor/SPFx wrapper or tenant policy change may be needed; this repository does not install one or change tenant policies. Cross-origin or opaque sandbox frames cannot reuse the site's REST session. A Content Security Policy that forbids inline scripts is incompatible with this single-file distribution.
@@ -115,6 +115,8 @@ The helper uses the same canonical titles, aliases, fields, digest handling, and
 ## Data, permissions, and editing
 
 The browser uses the current SharePoint login and credentialed REST requests. There is no secret in the HTML, no custom backend, and no application service account. SharePoint list and item permissions remain the authorization boundary. Give readers access to all four app lists; contributors need the relevant item and attachment permissions; only administrators should provision schema.
+
+Workspace settings uses the same owner-level permission rule as Modernization Tracker: a SharePoint site collection administrator, or a user with effective **Manage Permissions** access on the current site. Checking effective permissions supports inherited and nested security-group grants; list-level permissions and **Manage Lists** alone do not show the settings. Both the sidebar entry and the error-page shortcut remain hidden until this check succeeds. Failed or unknown checks and local/demo sessions do not expose settings. Application provisioning rechecks owner access and additionally requires **Manage Lists**; SharePoint still enforces the actual REST permissions. When automatic site detection is unavailable, an owner can supply the documented `siteUrl` query parameter to establish the connection.
 
 **Draft and Archived are workflow statuses, not security boundaries.** Users who can read an item through SharePoint can read its content regardless of its status. Use SharePoint permissions or a separate site for confidential material. Author/editor display-name fields are labels; SharePoint's built-in audit fields and permissions establish actual identity and access.
 
@@ -172,7 +174,8 @@ https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/inde
 | Create-space dialog opens but its button does nothing | Replace older HTML with the current release; earlier builds relied on native form submission, which sandboxed embeds can block. The current build does not require the iframe's `allow-forms` permission. |
 | Local mode appears on SharePoint | Page context is absent; use the explicit same-origin `siteUrl` and reload |
 | 401/403 or digest failure | Current session, same-origin host, site URL, and permissions; sign in again if needed |
-| Lists or columns missing | Run Workspace settings as a user with Manage Lists |
+| Lists or columns missing | A site owner with Manage Lists can run Workspace settings |
+| Workspace settings is not shown | It is owner-only; local/demo mode, non-owner access, or an unsuccessful owner check keeps it hidden |
 | Duplicate-list alias error | Resolve canonical/legacy duplicates; the app deliberately does not select one |
 | Save conflict | Another edit changed the item; reload the latest article before editing again |
 | Image save partly completed | Keep the editor open and follow its recovery message; reopen the latest page before retrying an uncertain save |

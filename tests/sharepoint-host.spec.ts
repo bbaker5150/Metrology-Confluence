@@ -1,5 +1,6 @@
 import { test, expect, type Page as BrowserPage } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { listSchema } from "../src/services/schema";
 
 const origin = "https://sharepoint-host.example.test";
 const site = `${origin}/sites/metsoft`;
@@ -12,6 +13,9 @@ async function openSharePointHost(
     denyCreate = false,
     cancelNativeSubmit = false,
     sandboxWithoutForms = false,
+    siteOwner = false,
+    failOwnerLookup = false,
+    failWorkspaceLoad = false,
   } = {},
 ) {
   const source = await readFile("dist/index.html", "utf8");
@@ -60,7 +64,17 @@ async function openSharePointHost(
       return route.fulfill({ contentType: "text/html", body: html });
     }
     if (path.endsWith("/_api/web/currentuser"))
-      return json({ Title: "SharePoint Editor" });
+      return json({ Title: "SharePoint Editor", IsSiteAdmin: false });
+    if (path.endsWith("/_api/web/EffectiveBasePermissions")) {
+      if (failOwnerLookup)
+        return json(
+          { error: { message: "Permission lookup unavailable." } },
+          403,
+        );
+      // Manage Lists is intentionally present for the non-owner: it must not
+      // expose controls reserved for users with site-owner permissions.
+      return json({ High: "0", Low: siteOwner ? "33556480" : "2048" });
+    }
     if (path.endsWith("/_api/contextinfo") && request.method() === "POST") {
       digestRequests++;
       return json({
@@ -68,24 +82,38 @@ async function openSharePointHost(
         FormDigestTimeoutSeconds: 1800,
       });
     }
-    const list = path.match(/\/getbytitle\('([^']+)'\)(\/items)?$/);
+    const list = path.match(/\/getbytitle\('([^']+)'\)(\/(?:items|fields))?$/);
     if (list) {
-      const [, title, items] = list;
+      const [, title, resource] = list;
       if (title.startsWith("KB_"))
         return json({ error: { message: "List not found" } }, 404);
-      if (
-        ![
-          "Metrology-Confluence - Spaces",
-          "Metrology-Confluence - Pages",
-        ].includes(title)
-      ) {
+      const schema = Object.values(listSchema).find(
+        (entry) => entry.title === title,
+      );
+      if (!schema) {
         unexpected.push(`${request.method()} ${path}`);
         return json({ error: { message: "Unexpected list" } }, 500);
       }
-      if (!items)
+      if (!resource)
         return json({ Id: "test-list-id", Title: title, BaseTemplate: 100 });
-      if (request.method() === "GET")
+      if (resource === "/fields")
+        return json({
+          value: [
+            { InternalName: "Title", TypeAsString: "Text" },
+            ...schema.fields.map((field) => ({
+              InternalName: field.name,
+              TypeAsString: field.type,
+            })),
+          ],
+        });
+      if (request.method() === "GET") {
+        if (failWorkspaceLoad)
+          return json(
+            { error: { message: "Workspace list unavailable." } },
+            500,
+          );
         return json({ value: title.endsWith("Spaces") ? spaces : [] });
+      }
       if (request.method() === "POST" && title.endsWith("Spaces")) {
         expect(request.headers()["x-requestdigest"]).toBe("test-form-digest");
         const fields = request.postDataJSON() as Record<string, unknown>;
@@ -109,14 +137,20 @@ async function openSharePointHost(
   });
   await page.goto(sandboxWithoutForms ? embedUrl : appUrl);
   const app = sandboxWithoutForms ? page.frameLocator("#knowledge-app") : page;
-  await expect(app.locator(".account-summary")).toContainText(
-    "SharePoint Editor",
-  );
-  await expect(
-    app.getByRole("heading", {
-      name: "Knowledge home",
-    }),
-  ).toBeVisible();
+  if (failWorkspaceLoad) {
+    await expect(
+      app.getByRole("heading", { name: "We couldn’t open this workspace" }),
+    ).toBeVisible();
+  } else {
+    await expect(app.locator(".account-summary")).toContainText(
+      "SharePoint Editor",
+    );
+    await expect(
+      app.getByRole("heading", {
+        name: "Knowledge home",
+      }),
+    ).toBeVisible();
+  }
   return {
     app,
     spaces,
@@ -299,6 +333,101 @@ test("a blank space name shows validation without making a SharePoint create req
   expect(fixture.unexpected).toEqual([]);
 });
 
+test("a site member cannot see workspace settings and the empty workspace has no decorative icon", async ({
+  page,
+}) => {
+  const fixture = await openSharePointHost(page);
+  await expect(
+    page.getByRole("heading", { name: "Good knowledge needs a home." }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".first-workspace img, .first-workspace svg"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Workspace settings", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Create", exact: true }),
+  ).toBeEnabled();
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test("a site member cannot see workspace settings from a workspace loading error", async ({
+  page,
+}) => {
+  const fixture = await openSharePointHost(page, { failWorkspaceLoad: true });
+  await expect(page.getByRole("alert")).toContainText(
+    "Workspace list unavailable.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Workspace settings", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Try again", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("dialog", { name: "Workspace settings" }),
+  ).toHaveCount(0);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test("a site owner can open workspace settings and inspect list setup", async ({
+  page,
+}) => {
+  const fixture = await openSharePointHost(page, { siteOwner: true });
+  await page
+    .getByRole("button", { name: "Workspace settings", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Workspace settings" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByText("All required fields are available", { exact: true }),
+  ).toHaveCount(4);
+  await expect(
+    dialog.getByRole("button", { name: "Setup complete", exact: true }),
+  ).toBeDisabled();
+  await expectNoHostSubmit(page);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test("an owner-permission lookup failure hides settings while normal workspace creation still works", async ({
+  page,
+}) => {
+  const fixture = await openSharePointHost(page, { failOwnerLookup: true });
+  await expect(
+    page.getByRole("button", { name: "Workspace settings", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Space/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Create a space" });
+  await dialog.getByLabel("Space name", { exact: true }).fill("Team knowledge");
+  await dialog
+    .getByRole("button", { name: "Create space", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Team knowledge", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Workspace settings", exact: true }),
+  ).toHaveCount(0);
+  expect(fixture.creates).toHaveLength(1);
+  await expectNoHostSubmit(page);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test("local demo mode does not show owner-only workspace settings", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Knowledge home" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Workspace settings", exact: true }),
+  ).toHaveCount(0);
+});
+
 async function openLocalSandbox(page: BrowserPage, appPath = "/") {
   const blockedSubmissions: string[] = [];
   page.on("console", (message) => {
@@ -352,14 +481,18 @@ for (const action of ["click", "Enter"] as const) {
   test(`uses an explicit site URL with ${action} in a sandbox without form permissions`, async ({
     page,
   }) => {
-    const { app, blockedSubmissions } = await openLocalSandbox(page);
+    const fixture = await openSharePointHost(page, {
+      siteOwner: true,
+      sandboxWithoutForms: true,
+    });
+    const { app, blockedSubmissions } = fixture;
     await app
       .getByRole("button", { name: "Workspace settings", exact: true })
       .click();
     const dialog = app.getByRole("dialog", { name: "Workspace settings" });
     await dialog.getByText("Connection settings", { exact: true }).click();
     const field = dialog.getByLabel("SharePoint site URL", { exact: true });
-    const siteUrl = `${new URL(page.url()).origin}/sites/metsoft`;
+    const siteUrl = site;
     await field.fill(siteUrl);
     if (action === "click") {
       await dialog
@@ -376,7 +509,8 @@ for (const action of ["click", "Enter"] as const) {
     await expect(
       app.getByRole("heading", { name: "Knowledge home", exact: true }),
     ).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/__sandbox-test__");
+    await expect(page).toHaveURL(embedUrl);
+    expect(fixture.unexpected).toEqual([]);
     expect(blockedSubmissions).toEqual([]);
   });
 }

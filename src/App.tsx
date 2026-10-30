@@ -63,6 +63,7 @@ export default function App() {
   const [spaces, setSpaces] = useState<Space[]>([]),
     [pages, setPages] = useState<Page[]>([]),
     [user, setUser] = useState(""),
+    [canManageWorkspace, setCanManageWorkspace] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const [view, setView] = useState<View>("home"),
@@ -110,6 +111,20 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    void service
+      .canManageWorkspace()
+      .then((allowed) => {
+        if (active) setCanManageWorkspace(allowed);
+      })
+      .catch(() => {
+        if (active) setCanManageWorkspace(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try {
@@ -366,14 +381,16 @@ export default function App() {
           )}
         </div>
         <div className="workspace-account">
-          <button
-            type="button"
-            className="workspace-settings"
-            onClick={() => setAdmin(true)}
-          >
-            <Settings size={17} />
-            Workspace settings
-          </button>
+          {canManageWorkspace && (
+            <button
+              type="button"
+              className="workspace-settings"
+              onClick={() => setAdmin(true)}
+            >
+              <Settings size={17} />
+              Workspace settings
+            </button>
+          )}
           <div className="account-summary">
             <span className="avatar">
               {(user || "Knowledge Hub")
@@ -538,13 +555,15 @@ export default function App() {
                 >
                   Try again
                 </button>
-                <button
-                  type="button"
-                  className="button primary"
-                  onClick={() => setAdmin(true)}
-                >
-                  Workspace settings
-                </button>
+                {canManageWorkspace && (
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => setAdmin(true)}
+                  >
+                    Workspace settings
+                  </button>
+                )}
               </div>
             </section>
           ) : loading ? (
@@ -613,7 +632,6 @@ export default function App() {
                 <>
                   {!spaces.length ? (
                     <div className="first-workspace">
-                      <img src={emblem} alt="" width="84" height="84" />
                       <h2>Good knowledge needs a home.</h2>
                       <p>
                         Start with a space for your team, then add your first
@@ -821,7 +839,7 @@ export default function App() {
           }}
         />
       )}
-      {admin && (
+      {admin && canManageWorkspace && (
         <SetupDialog
           onClose={() => setAdmin(false)}
           onReady={async () => {
@@ -1152,7 +1170,7 @@ function SetupDialog({
       <div className="notice">
         {service.mode === "local"
           ? "You’re in local demo mode. Setup below checks the browser adapter; it does not create SharePoint lists."
-          : "SharePoint enforces your site permissions. List setup requires site-level Manage Lists permission."}
+          : "Workspace settings are available to site owners. SharePoint enforces your permissions; list setup also requires Manage Lists permission."}
       </div>
       {checks.map((c) => (
         <div className="setup-row" key={c.title}>
