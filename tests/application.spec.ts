@@ -46,13 +46,11 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
   await expect(
     page.getByText("Verified in the bundled HTML.", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByLabel("Upload attachments")
-    .setInputFiles({
-      name: "reference.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("Measurement reference"),
-    });
+  await page.getByLabel("Upload attachments").setInputFiles({
+    name: "reference.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Measurement reference"),
+  });
   await expect(page.getByRole("link", { name: "reference.txt" })).toBeVisible();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await page
@@ -82,7 +80,8 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
     page.getByText("Verified in the bundled HTML.", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Control+k");
-  await page.getByRole("searchbox").fill("Browser verification");
+  await expect(page.getByRole("searchbox")).toBeFocused();
+  await page.keyboard.type("Browser verification");
   await expect(page.locator(".search-result")).toHaveCount(1);
   await page.keyboard.press("Enter");
   await expect(

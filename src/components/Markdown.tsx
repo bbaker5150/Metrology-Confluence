@@ -148,6 +148,36 @@ export default function Markdown({
               href={href}
               target={href?.startsWith("#") ? undefined : "_blank"}
               rel="noopener noreferrer"
+              onClick={(event) => {
+                if (
+                  !href?.startsWith("#") ||
+                  new URLSearchParams(href.slice(1)).has("page")
+                )
+                  return;
+                // The hash belongs to the article router. Heading links scroll
+                // inside this Markdown instance without replacing that route.
+                event.preventDefault();
+                let fragment = href.slice(1);
+                try {
+                  fragment = decodeURIComponent(fragment);
+                } catch {
+                  return;
+                }
+                const target = Array.from(
+                  event.currentTarget
+                    .closest(".markdown")
+                    ?.querySelectorAll<HTMLElement>("[id]") || [],
+                ).find((element) => element.id === idPrefix + fragment);
+                target?.scrollIntoView({
+                  behavior: window.matchMedia(
+                    "(prefers-reduced-motion: reduce)",
+                  ).matches
+                    ? "instant"
+                    : "smooth",
+                  block: "start",
+                });
+                target?.focus({ preventScroll: true });
+              }}
             >
               {children}
             </a>

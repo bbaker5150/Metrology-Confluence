@@ -13,9 +13,10 @@ export default function Modal({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
+  const opener = useRef(document.activeElement as HTMLElement | null);
   close.current = onClose;
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
+    const previous = opener.current;
     const el = ref.current!;
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -25,7 +26,11 @@ export default function Modal({
           'button,input,textarea,select,a[href],[tabindex="0"]',
         ),
       ).filter((x) => !x.hasAttribute("disabled") && x.offsetParent !== null);
-    (focusable()[0] || el).focus();
+    (
+      el.querySelector<HTMLElement>('input:not([type="file"]),textarea') ||
+      focusable()[0] ||
+      el
+    ).focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
