@@ -303,7 +303,10 @@ export class SharePointClient {
     return this.names.get(key)!;
   }
 }
-type LocalData = ReturnType<typeof createSeed> & { nextPageId?: number };
+type LocalData = ReturnType<typeof createSeed> & {
+  nextPageId?: number;
+  nextSpaceId?: number;
+};
 function localData(): LocalData {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
@@ -959,10 +962,91 @@ export class KnowledgeService {
         ),
       );
     const data = localData();
-    const space = { Id: nextId(data.spaces), ...fields };
+    const space = {
+      Id: Math.max(nextId(data.spaces), data.nextSpaceId || 1),
+      ...fields,
+    };
+    data.nextSpaceId = space.Id + 1;
     data.spaces.push(space);
     persist(data);
     return space;
+  }
+  async updateSpace(
+    spaceId: number,
+    changes: { Title?: string; AccentColor?: string },
+  ): Promise<Space> {
+    this.assertInitialized();
+    id(spaceId);
+    const fields: { Title?: string; AccentColor?: string } = {};
+    if (changes.Title !== undefined) {
+      const title = changes.Title.trim();
+      if (!title || title.length > 255)
+        throw new Error("Enter a space name between 1 and 255 characters.");
+      fields.Title = title;
+    }
+    if (changes.AccentColor !== undefined) {
+      if (!/^#[0-9a-f]{6}$/i.test(changes.AccentColor))
+        throw new Error("Choose a valid six-digit hex color.");
+      fields.AccentColor = changes.AccentColor.toLowerCase();
+    }
+    const current = (await this.getSpaces()).find(
+      (space) => space.Id === spaceId,
+    );
+    if (!current)
+      throw new Error("The space no longer exists. Refresh the workspace.");
+    if (this.client) {
+      await this.client.write(
+        `${await this.client.resolve("Spaces")}/items(${spaceId})`,
+        fields,
+        "MERGE",
+      );
+    } else {
+      const data = localData();
+      const at = data.spaces.findIndex((space) => space.Id === spaceId);
+      if (at < 0)
+        throw new Error("The space no longer exists. Refresh the workspace.");
+      data.spaces[at] = { ...data.spaces[at], ...fields };
+      persist(data);
+    }
+    return { ...current, ...fields };
+  }
+  async deleteSpace(spaceId: number): Promise<void> {
+    this.assertInitialized();
+    id(spaceId);
+    const occupied =
+      "Move or delete every page in this space first, including drafts and archived pages. Pages are never deleted with a space.";
+    if (!this.client) {
+      const data = localData();
+      if (!data.spaces.some((space) => space.Id === spaceId))
+        throw new Error("The space no longer exists. Refresh the workspace.");
+      if (data.pages.some((page) => page.SpaceId === spaceId))
+        throw new Error(occupied);
+      data.nextSpaceId = Math.max(nextId(data.spaces), data.nextSpaceId || 1);
+      data.spaces = data.spaces.filter((space) => space.Id !== spaceId);
+      persist(data);
+      return;
+    }
+    const pages = await this.client.collection<{ Id: number }>(
+      `${await this.client.resolve("Pages")}/items?$select=Id&$filter=SpaceId eq ${spaceId}&$top=1`,
+    );
+    if (pages.length) throw new Error(occupied);
+    // Like page recycle, this is a fresh cross-list check, not an atomic constraint.
+    // SharePoint enforces the caller's list permissions; no elevated credentials.
+    try {
+      await this.client.write(
+        `${await this.client.resolve("Spaces")}/items(${spaceId})/recycle()`,
+      );
+    } catch (error) {
+      if (
+        error instanceof SharePointError &&
+        error.status < 500 &&
+        error.status !== 408
+      )
+        throw error;
+      throw new PageDeletionError(
+        "The delete result could not be confirmed. Refresh the workspace and check the SharePoint recycle bin before trying again.",
+      );
+    }
   }
   async checkSetup(): Promise<SetupCheck[]> {
     this.assertInitialized();

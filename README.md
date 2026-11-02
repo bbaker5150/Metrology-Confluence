@@ -8,24 +8,32 @@ Preview the [home](docs/previews/home-light.webp), [visual editor](docs/previews
 
 ## Features
 
-- Spaces, nested pages, shared pinned articles, recent updates, personal drafts, saved-for-later shortcuts, and topic browsing.
+- Spaces, nested pages, shared pinned articles, recent updates, a My drafts filter, saved-for-later shortcuts, and topic browsing.
 - Duplicate a page with independent attachment copies, move its location, or archive and restore it. Library views include title/tag/author filtering and sorting.
 - Global command search (`Ctrl+K` / `Cmd+K`) with space, status, tag, and date filters.
-- Visual Tiptap editor with headings, bold/italic/underline, lists and action lists, links, undo/redo, and five starter templates.
+- Visual Tiptap editor with headings, bold/italic/underline, lists and action lists, links, undo/redo, and 20 grouped starter templates.
 - An Insert menu and `/` on an empty line for tables, code blocks, callouts, expandable sections, inline status badges, dividers, symbols, emoji, and images. Secondary formatting includes strikethrough, highlighting, inline code, subscript, superscript, and text alignment.
 - Page links selected by title or space, an authoring outline, reader-style preview, and find/replace with case and whole-word controls.
 - Automatic recovery copies in this browser, including staged images, with explicit restore/discard choices. Saving to SharePoint remains manual.
 - Images from upload, paste, drag and drop, a URL, or existing page attachments, with description and width controls. Code blocks have a language selector; the reader adds syntax highlighting and copy controls.
-- Article breadcrumbs, metadata, heading navigation, connected pages, code copy, attachments, comments, Markdown export, and print/PDF layout.
+- Article breadcrumbs, metadata, heading navigation, connected pages, code copy, attachments, comments, Markdown and Word (.docx) export, and print/PDF layout.
 - Revision snapshots with preview, text comparison, and restore; a restored revision becomes a new saved version. Creators can delete leaf pages through the app after confirmation.
 - Light/dark suite themes, the shared MetSoft logo, a consolidated Create menu, a quieter article action bar, responsive navigation, and Workspace settings.
 - Seeded browser-local demo storage for development; SharePoint REST v1 and Lists for deployment.
 
 ## Working in the hub
 
-Use **Create → Space** to add a team or topic, then **Create → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recently updated, Pinned pages, My drafts, Saved for later, and Archived pages provide quick ways back to useful content. Library views can be filtered by title, tag, or author and sorted by recent update, title, or oldest update. Global search is available in the top bar or with `Ctrl+K` / `Cmd+K`; its default **Active pages** filter excludes archived content. Choose **Archived** explicitly to search the archive.
+Use the **+** button in the top bar and choose **Space** to add a team or topic, then **+ → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recently updated, Pinned pages, My drafts, Saved for later, and Archived pages provide quick ways back to useful content. Library views can be filtered by title, tag, or author and sorted by recent update, title, or oldest update. Global search is available in the top bar or with `Ctrl+K` / `Cmd+K`; its default **Active pages** filter excludes archived content. Choose **Archived** explicitly to search the archive.
 
-The top bar uses matching **Create (+)**, **Search**, and **Theme** icons in that order. Pages open in a focused reading view with the app header hidden and the sidebar retained. On small screens, the navigation button sits beside the breadcrumbs. Choose **More page actions (⋯) → Edit page**, the first menu option, to start writing. That menu also groups version history, duplication, moving, archive/restore, personal shortcuts, copying a page link, exports, and **Delete page** for the original creator. Pinning remains a separate toggle shared by the team. Site connection, list provisioning, and team access checks live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
+The top bar uses matching **Create (+)**, **Search**, and **Theme** icons in that order. Reading and editing both hide the app header and retain the sidebar. On small screens, the navigation button sits beside the reader breadcrumbs or at the left of the editor action bar. Choose **More page actions (⋯) → Edit page**, the first menu option, to start writing. That menu also groups version history, duplication, moving, archive/restore, personal shortcuts, copying a page link, exports, and **Delete page** for the original creator. Pinning remains a separate toggle shared by the team. Site connection, list provisioning, and team access checks live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
+
+### Manage spaces
+
+Use **⋯** on a space card or next to its sidebar name to rename or delete it. Sidebar menus appear on hover or keyboard focus and stay visible on touch devices. Click the colored square beside a sidebar space, or its folder square on the home card, to choose a preset or custom color. Renaming and recoloring keep the space ID, links, and page membership unchanged; changes are shared with the team.
+
+A space must be empty before deletion, including Draft and Archived pages. Move or delete its pages first. Space changes use your existing SharePoint list permissions; deletion moves the space item to the SharePoint recycle bin. The membership check and recycle request are separate operations, so coordinate deletion if teammates are adding pages at the same time. No branch or space cascades are performed. Local demo deletion has no undo.
+
+Page and subpage **⋯** menus offer **Edit page** to members and **Delete page** only to the original creator. Deletion rechecks the native SharePoint creator and child-page constraints before sending the request.
 
 ### Organize and reuse pages
 
@@ -37,6 +45,10 @@ The top bar uses matching **Create (+)**, **Search**, and **Theme** icons in tha
 Duplication follows the existing attachment limits: **2 MB per file in local mode**, **10 MB per file in SharePoint mode**, and **50 MB total per copy**. Files are checked before creating the draft. Creating the draft, copying attachments, and saving its content are separate operations. An uncertain response can leave a partial copy; automatic retries are blocked, and **Open partial draft** is offered when the new item ID is known. Inspect that draft and its attachments before starting another copy. The app does not silently delete a partial draft.
 
 **Connected pages** shows **Child pages**, **Links to this page**, and **Links from this page**. These connections come from accessible active pages and actual internal links, including links in older Markdown articles. They do not change sharing or grant access.
+
+### Word export
+
+Choose **More page actions → Export to Word** to download a real `.docx` file. Headings, common text formatting, tables, checklists, links, code, and expanded section contents are included. Page-attachment and embedded raster images are embedded when readable; external or unavailable images retain descriptions and available source links, with a note in the document. Conversion limits are 10 MB per source image and 25 MB total source images. The export is a portable document, not a backup of comments, history, permissions, or every attachment. It may simplify interactive styling and custom layouts. Word generation runs entirely in the bundled app with no document conversion service.
 
 ### Personal reading shortcuts
 
@@ -50,13 +62,13 @@ To restore, select **Restore**, review the confirmation, and select **Restore ve
 
 ### Write and edit
 
-The visual editor occupies the main document area, keeping the workspace sidebar available. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
+The visual editor occupies the main document area, keeping the workspace sidebar available. Select text to apply formatting, use the toolbar’s **+** icon to add a block, or type `/` at the start of an empty paragraph. Common toolbar controls include images, emoji/symbols, tables, and code; less frequent blocks remain under **+**. The table picker supports a visual 10 × 8 grid, arrow-key selection, optional header row, and custom sizes up to 20 columns × 100 rows. The searchable symbol picker offers categories, recent selections on this device, skin tones for supported hand symbols, and metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer 20 grouped starter templates.
 
 Use **Insert → Expand section** for supporting procedures or background that readers can open when needed. The section has an editable title and rich body; it opens while editing and starts collapsed in the reader. **Insert → Status** adds a short colored label within the article. These labels are separate from the page's Draft/Published status. The link control has **Pages** and **URL** tabs: search accessible pages by title or space, choose a target, and optionally customize the link text.
 
 **Page tools** groups the authoring utilities. **Outline** lists headings and jumps to the selected section. **Preview** shows the current text and staged images without publishing; **Back to writing** returns to the editor. **Find and replace** searches visible document text across formatting marks, with **Match case** and **Whole words** options, previous/next match navigation, and current/all replacement. It does not search link destinations, image attributes, or status labels; select a status to edit its label and color. Replacement is undoable; text surrounding a replacement retains its formatting. Outline and find/replace are available in the visual editor.
 
-Use **Save draft**, **Publish page**, or **Save changes** to persist your edits. The footer shows unsaved changes and pending image uploads. There is **no automatic saving to SharePoint and no real-time collaborative editing**. Navigating elsewhere in the app with unsaved changes opens an in-app discard dialog; a browser navigation guard also runs where the host supports it. Sandboxed hosts may suppress the browser's native leave prompt. Replacing existing content with a template and switching to **More formatting → Markdown source** use in-app confirmation dialogs. Source conversion can simplify some visual formatting.
+Use **Publish** for a new or draft page, or **Update** for a published page. Both save to the workspace and record a revision. The adjacent arrow opens **Page save options**: **Save changes / Publish page** saves as Published; **Save draft** saves the shared page as Draft (a published page stops being Published); **Close** leaves without saving and asks before discarding changed work. Drafts are visible and editable by other workspace members with access; they are not private working copies. The footer shows unsaved changes and pending image uploads. There is **no automatic saving to SharePoint and no real-time collaborative editing**. Navigating elsewhere in the app with unsaved changes opens an in-app discard dialog; a browser navigation guard also runs where the host supports it. Sandboxed hosts may suppress the browser's native leave prompt. Replacing existing content with a template and switching to **More formatting → Markdown source** use in-app confirmation dialogs. Source conversion can simplify some visual formatting.
 
 ### Local draft recovery
 

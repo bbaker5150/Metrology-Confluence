@@ -331,7 +331,7 @@ test("duplicate creates an independent draft and copies attachments without chan
     "src",
     /\/Attachments\/20\/reference\.png$/,
   );
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.locator(".article-content img")).toHaveAttribute(
     "src",
     /\/Attachments\/20\/reference\.png$/,

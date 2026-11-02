@@ -1514,3 +1514,217 @@ fieldset.rich-workspace {
     width: 140px;
   }
 }
+
+/* Keep the heading/search fixed and give each picker exactly one scroll area. */
+.rich-popover-insert,
+.rich-popover-symbol {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rich-popover-insert .rich-insert-list {
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rich-popover-insert .rich-popover-heading,
+.rich-popover-insert .rich-picker-search,
+.rich-popover-symbol .rich-popover-heading,
+.rich-popover-symbol .rich-picker-search,
+.symbol-categories {
+  flex-shrink: 0;
+}
+.rich-insert-button {
+  width: 32px;
+  min-width: 32px;
+  padding: 6px;
+  justify-content: center;
+}
+.rich-popover-table {
+  width: 320px;
+}
+.table-picker {
+  padding: 4px 16px 16px;
+}
+.table-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+}
+.table-picker-grid button {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.table-picker-grid button.selected {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+.table-picker > p {
+  text-align: center;
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.table-header-toggle {
+  display: flex;
+  flex-direction: row;
+  margin: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.table-header-toggle input {
+  width: auto;
+}
+.table-custom-size {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+}
+.table-custom-size label {
+  margin: 0;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+}
+.table-custom-size input {
+  width: 100%;
+  margin-top: 5px;
+  padding: 7px;
+}
+.table-custom-size .button {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rich-popover-symbol {
+  width: 390px;
+}
+.symbol-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+.symbol-categories button {
+  background: none;
+  color: var(--muted);
+  border: 0;
+  border-radius: 5px;
+  height: 30px;
+  min-width: 30px;
+  font-size: 17px;
+}
+.symbol-categories button[aria-pressed="true"] {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.rich-popover-symbol .rich-picker-search select {
+  width: 45px;
+  padding: 4px;
+  font-size: 17px;
+}
+.symbol-results {
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 320px;
+  overscroll-behavior: contain;
+}
+.symbol-category-title {
+  padding: 12px 16px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.rich-symbol-grid {
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.rich-symbol-grid button {
+  background: transparent;
+  font-size: 24px;
+}
+.update-control {
+  position: relative;
+}
+.update-split {
+  display: flex;
+}
+.update-split .button {
+  min-height: 36px;
+  height: 36px;
+  font-size: 12px;
+}
+.update-split .button:first-child {
+  border-radius: 6px 0 0 6px;
+  min-width: 84px;
+}
+.update-split .update-toggle {
+  min-width: 32px;
+  width: 32px;
+  padding: 6px;
+  border-left: 1px solid #ffffff55;
+  border-radius: 0 6px 6px 0;
+}
+.update-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(330px, calc(100vw - 28px));
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 36px #07152230;
+  z-index: 30;
+  padding: 6px;
+}
+.update-options > button {
+  width: 100%;
+  padding: 12px 10px;
+  display: flex;
+  gap: 12px;
+  text-align: left;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+}
+.update-options > button:hover {
+  background: var(--surface-2);
+}
+.update-options svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.update-options span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.update-options strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.update-options small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.rich-page-actions > .mobile-menu {
+  margin-right: auto;
+}
+@media (max-width: 650px) {
+  .rich-popover-symbol,
+  .rich-popover-table {
+    left: 8px;
+    width: min(390px, calc(100% - 16px));
+  }
+}

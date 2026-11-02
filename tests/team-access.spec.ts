@@ -432,7 +432,7 @@ test("an app-group member reads and edits an owner's page and creates a page wit
   await page
     .getByRole("textbox", { name: "Article content", exact: true })
     .fill("Procedure updated by a team member.");
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
   await expect(page.locator(".article-content")).toContainText(
     "Procedure updated by a team member.",
   );
@@ -445,7 +445,7 @@ test("an app-group member reads and edits an owner's page and creates a page wit
   await page
     .getByRole("textbox", { name: "Article content", exact: true })
     .fill("New shared team knowledge.");
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "App member procedure", exact: true }),
   ).toBeVisible();

@@ -28,7 +28,7 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
   await page
     .getByLabel("Tags", { exact: true })
     .fill("verification, calibration");
-  await page.getByRole("button", { name: "Publish page" }).click();
+  await page.getByRole("button", { name: "Publish" }).click();
   await expect(
     page.getByRole("heading", {
       name: "Browser verification procedure",
@@ -76,7 +76,7 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
       .getByRole("textbox", { name: "Article content" })
       .getByRole("heading", { name: "Updated procedure" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Updated procedure" }),
   ).toBeVisible();
@@ -175,6 +175,9 @@ test("mobile navigation, themes, and safe Markdown", async ({ page }) => {
     .fill(
       "## Safe content\n\n<script>window.compromised = true</script>\n\n[bad](javascript:alert(1))",
     );
+  await page
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Safe Markdown", exact: true }),

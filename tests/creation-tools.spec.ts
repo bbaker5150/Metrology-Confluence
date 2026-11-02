@@ -105,7 +105,7 @@ test("the page picker inserts a stable internal link that survives publishing an
       exact: true,
     }),
   ).toHaveAttribute("href", "#page=2");
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   const readerLink = page.locator(".article-content").getByRole("link", {
     name: "Measurement readiness checklist",
     exact: true,
@@ -138,7 +138,9 @@ test("expand sections and status labels survive publishing, search, and Markdown
   await content.fill("Release review");
   await content.press("End");
   await content.press("Enter");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await page
     .getByRole("dialog", { name: "Insert content", exact: true })
     .getByRole("button", { name: /^Status / })
@@ -153,7 +155,9 @@ test("expand sections and status labels survive publishing, search, and Markdown
   await content.press("Enter");
   await expect(chip).toHaveAttribute("data-tone", "green");
   await expect(chip).toHaveText("Approved for trial");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await page
     .getByRole("dialog", { name: "Insert content", exact: true })
     .getByRole("button", { name: /^Expand section / })
@@ -175,7 +179,7 @@ test("expand sections and status labels survive publishing, search, and Markdown
   await page
     .getByRole("button", { name: "Bold (Ctrl+B)", exact: true })
     .click();
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   const readerSection = page.locator(
     ".article-content details.document-expand",
   );
@@ -246,7 +250,9 @@ test("Enter after a selected status keeps the label and begins a new paragraph",
   const content = await createDraft(page, "Status keyboard continuation");
   await content.fill("Review status ");
   await content.press("End");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await page
     .getByRole("dialog", { name: "Insert content", exact: true })
     .getByRole("button", { name: /^Status / })
@@ -267,7 +273,7 @@ test("Enter after a selected status keeps the label and begins a new paragraph",
   await expect(content.locator("p").last()).toHaveText(
     "Additional review context.",
   );
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.locator(".article-content .document-status.status-green"),
   ).toHaveText("Ready");

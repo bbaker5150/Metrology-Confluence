@@ -29,6 +29,7 @@ import type { Attachment, Comment, Page, Space } from "../types";
 import { PageDeletionError, service } from "../services/sharepointService";
 import Markdown, { extractHeadings, type Heading } from "./Markdown";
 import Modal from "./Modal";
+import { downloadWord } from "../lib/exportWord";
 import { contentText, toMarkdown } from "../lib/content";
 import PageManagementDialog, {
   type PageManagementAction,
@@ -109,6 +110,8 @@ export default function ArticleReader({
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [exportingWord, setExportingWord] = useState(false);
+  const exportPending = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [managementAction, setManagementAction] =
     useState<PageManagementAction | null>(null);
@@ -133,7 +136,7 @@ export default function ArticleReader({
   currentPageId.current = page.Id;
   const canDelete = deletePermission === page.Id;
   const archived = page.Status === "Archived";
-  const working = busy || deleting || mutationBusy;
+  const working = busy || deleting || mutationBusy || exportingWord;
   useLayoutEffect(() => {
     onBusyChange(working);
   }, [working, onBusyChange]);
@@ -513,6 +516,41 @@ export default function ArticleReader({
                 <button type="button" onClick={exportMarkdown}>
                   <Download size={16} />
                   Download Markdown
+                </button>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={async () => {
+                    if (exportPending.current) return;
+                    exportPending.current = true;
+                    setExportingWord(true);
+                    try {
+                      const files = await service.getAttachments(page.Id);
+                      const warnings = await downloadWord(page, {
+                        attachments: files,
+                        readAttachment: (name) =>
+                          service.readAttachment(page.Id, name),
+                        pageUrl: location.href,
+                      });
+                      onToast(
+                        warnings.length
+                          ? "Word document exported. Some images are included as source links; see the note in the document."
+                          : "Word document exported.",
+                      );
+                    } catch (error) {
+                      onToast(
+                        error instanceof Error
+                          ? error.message
+                          : "Word export could not be completed.",
+                      );
+                    } finally {
+                      exportPending.current = false;
+                      setExportingWord(false);
+                    }
+                  }}
+                >
+                  <Download size={16} />
+                  {exportingWord ? "Exporting Word…" : "Export to Word"}
                 </button>
                 <button type="button" onClick={() => window.print()}>
                   <Printer size={16} />

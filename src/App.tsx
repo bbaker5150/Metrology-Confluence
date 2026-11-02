@@ -29,6 +29,10 @@ import type { Space, Page } from "./types";
 import emblem from "./assets/metsoft-emblem.webp";
 import Modal from "./components/Modal";
 import Editor from "./components/Editor";
+import ItemActions from "./components/ItemActions";
+import WorkspaceItemDialog, {
+  type WorkspaceItemAction,
+} from "./components/WorkspaceItemDialog";
 import ArticleReader from "./components/ArticleReader";
 import GroupAccessPanel from "./components/GroupAccessPanel";
 import { useSavedPages } from "./hooks/useSavedPages";
@@ -96,6 +100,9 @@ export default function App() {
     [toast, setToast] = useState(""),
     [expandedSpaces, setExpandedSpaces] = useState<number[]>([]),
     [createOpen, setCreateOpen] = useState(false);
+  const [itemAction, setItemAction] = useState<WorkspaceItemAction | null>(
+    null,
+  );
   const createRef = useRef<HTMLDivElement>(null);
   const editorState = useRef({ dirty: false, busy: false });
   const readerBusy = useRef(false);
@@ -226,13 +233,19 @@ export default function App() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (!admin && !newSpace && !discardOpen && !readerBusy.current)
+        if (
+          !admin &&
+          !newSpace &&
+          !discardOpen &&
+          !itemAction &&
+          !readerBusy.current
+        )
           setSearch((v) => !v);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [admin, newSpace, discardOpen]);
+  }, [admin, newSpace, discardOpen, itemAction]);
   useEffect(() => {
     const h = () => {
       const nextHash = location.hash;
@@ -324,6 +337,30 @@ export default function App() {
         ? v.map((x) => (x.Id === p.Id ? p : x))
         : [p, ...v],
     );
+  const manageItem = (action: WorkspaceItemAction) =>
+    transition(() => setItemAction(action));
+  const spaceActions = (s: Space) => [
+    {
+      label: "Rename space",
+      run: () => manageItem({ kind: "rename", space: s }),
+    },
+    {
+      label: "Delete space",
+      danger: true,
+      run: () => manageItem({ kind: "deleteSpace", space: s }),
+    },
+  ];
+  const removePage = (deleted: Page) => {
+    readerBusy.current = false;
+    setPages((current) => current.filter((item) => item.Id !== deleted.Id));
+    if (pageId === deleted.Id) go("space", deleted.SpaceId);
+    notify(
+      service.mode === "sharepoint"
+        ? "Page moved to the SharePoint recycle bin."
+        : "Page deleted.",
+    );
+    void refresh();
+  };
   const page = pages.find((p) => p.Id === pageId),
     space = spaces.find((s) => s.Id === (page?.SpaceId || spaceId));
   const readingPage = Boolean(page && !editor && !loading && !error);
@@ -439,7 +476,34 @@ export default function App() {
       <aside
         className={`workspace-sidebar ${mobile ? "open" : ""}`}
         aria-label="Main navigation"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && mobile) {
+            setMobile(false);
+            document
+              .querySelector<HTMLButtonElement>(
+                '[aria-label="Open navigation"]',
+              )
+              ?.focus();
+          }
+        }}
       >
+        {mobile && (
+          <button
+            type="button"
+            className="sidebar-close mobile-menu"
+            aria-label="Close navigation"
+            onClick={() => {
+              setMobile(false);
+              document
+                .querySelector<HTMLButtonElement>(
+                  '[aria-label="Open navigation"]',
+                )
+                ?.focus();
+            }}
+          >
+            <X size={18} />
+          </button>
+        )}
         <a
           className="suite-brand"
           href="#"
@@ -510,6 +574,18 @@ export default function App() {
                   </button>
                   <button
                     type="button"
+                    className="space-color-toggle"
+                    aria-label={`Change color for ${s.Title}`}
+                    title={`Change color for ${s.Title}`}
+                    onClick={() => manageItem({ kind: "color", space: s })}
+                  >
+                    <span
+                      className="space-dot"
+                      style={{ background: s.AccentColor }}
+                    />
+                  </button>
+                  <button
+                    type="button"
                     className="space-nav-title"
                     onClick={() => {
                       go("space", s.Id);
@@ -518,12 +594,12 @@ export default function App() {
                       );
                     }}
                   >
-                    <span
-                      className="space-dot"
-                      style={{ background: s.AccentColor }}
-                    />
                     {s.Title}
                   </button>
+                  <ItemActions
+                    label={`Space actions for ${s.Title}`}
+                    items={spaceActions(s)}
+                  />
                 </div>
                 {expanded && (
                   <PageTree
@@ -531,6 +607,11 @@ export default function App() {
                     selected={pageId}
                     onNavigate={navigate}
                     onCreate={create}
+                    userId={savedPages.userId}
+                    onEdit={(p) => transition(() => startEditor(p))}
+                    onDelete={(p) =>
+                      manageItem({ kind: "deletePage", page: p })
+                    }
                   />
                 )}
               </div>
@@ -574,7 +655,7 @@ export default function App() {
         </div>
       </aside>
       <div className="workspace-main">
-        {!readingPage && (
+        {!readingPage && !editor && (
           <header className="workspace-topbar">
             <button
               type="button"
@@ -717,6 +798,7 @@ export default function App() {
               page={editor}
               spaces={spaces}
               pages={pages}
+              onOpenNavigation={() => setMobile(true)}
               onStateChange={reportEditorState}
               onDiscardRecoveryChange={registerDiscardRecovery}
               onRecoveryWarning={notify}
@@ -874,7 +956,7 @@ export default function App() {
                       </p>
                       <div className="onboarding-steps">
                         <span>
-                          <b>1</b>Choose <strong>Create → Space</strong>
+                          <b>1</b>Choose <strong>+ → Space</strong>
                         </span>
                         <span>
                           <b>2</b>Add a page
@@ -892,36 +974,54 @@ export default function App() {
                       </div>
                       <div className="workspace-space-grid">
                         {spaces.map((s) => (
-                          <button
-                            type="button"
-                            className="workspace-space-card"
-                            key={s.Id}
-                            onClick={() => {
-                              go("space", s.Id);
-                              setExpandedSpaces((v) =>
-                                v.includes(s.Id) ? v : [...v, s.Id],
-                              );
-                            }}
-                          >
-                            <span
-                              className="space-card-icon"
+                          <div className="space-card-container" key={s.Id}>
+                            <button
+                              type="button"
+                              className="workspace-space-card"
+                              onClick={() => {
+                                go("space", s.Id);
+                                setExpandedSpaces((v) =>
+                                  v.includes(s.Id) ? v : [...v, s.Id],
+                                );
+                              }}
+                            >
+                              <span
+                                className="space-card-icon-placeholder"
+                                aria-hidden="true"
+                              />
+                              <h3>{s.Title}</h3>
+                              <p>{s.Description}</p>
+                              <div>
+                                <span>
+                                  {
+                                    live.filter((p) => p.SpaceId === s.Id)
+                                      .length
+                                  }{" "}
+                                  {live.filter((p) => p.SpaceId === s.Id)
+                                    .length === 1
+                                    ? "page"
+                                    : "pages"}
+                                </span>
+                                <ArrowRight size={16} />
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              className="space-card-icon space-card-color"
                               style={{ color: s.AccentColor }}
+                              aria-label={`Change color for ${s.Title}`}
+                              title={`Change color for ${s.Title}`}
+                              onClick={() =>
+                                manageItem({ kind: "color", space: s })
+                              }
                             >
                               <FolderOpen size={24} />
-                            </span>
-                            <h3>{s.Title}</h3>
-                            <p>{s.Description}</p>
-                            <div>
-                              <span>
-                                {live.filter((p) => p.SpaceId === s.Id).length}{" "}
-                                {live.filter((p) => p.SpaceId === s.Id)
-                                  .length === 1
-                                  ? "page"
-                                  : "pages"}
-                              </span>
-                              <ArrowRight size={16} />
-                            </div>
-                          </button>
+                            </button>
+                            <ItemActions
+                              label={`Space actions for ${s.Title}`}
+                              items={spaceActions(s)}
+                            />
+                          </div>
                         ))}
                       </div>
                     </section>
@@ -1050,7 +1150,7 @@ export default function App() {
                                 ? "Pages you archive will appear here, away from the active workspace."
                                 : view === "drafts"
                                   ? "Drafts appear here when you save a page without publishing."
-                                  : "Use Create → Page to add knowledge to this space."}
+                                  : "Use the + button in the top bar, then choose Page to add knowledge to this space."}
                         </p>
                       </div>
                     )}
@@ -1093,6 +1193,31 @@ export default function App() {
           <span>Knowledge is better when it’s shared.</span>
         </footer>
       </div>
+      {itemAction && (
+        <WorkspaceItemDialog
+          action={itemAction}
+          pages={pages}
+          onClose={() => setItemAction(null)}
+          onBusy={reportReaderBusy}
+          onSpaceChanged={(updated) => {
+            setSpaces((current) =>
+              current.map((s) => (s.Id === updated.Id ? updated : s)),
+            );
+            notify("Space updated.");
+          }}
+          onSpaceDeleted={(deleted) => {
+            setSpaces((current) => current.filter((s) => s.Id !== deleted.Id));
+            go("home");
+            notify(
+              service.mode === "sharepoint"
+                ? "Space moved to the SharePoint recycle bin."
+                : "Space deleted.",
+            );
+            void refresh();
+          }}
+          onPageDeleted={removePage}
+        />
+      )}
       {search && (
         <SearchDialog
           pages={pages}
@@ -1204,8 +1329,14 @@ function PageTree({
   selected,
   onNavigate,
   onCreate,
+  userId,
+  onEdit,
+  onDelete,
 }: {
   pages: Page[];
+  userId: number | null;
+  onEdit: (page: Page) => void;
+  onDelete: (page: Page) => void;
   selected: number;
   onNavigate: (id: number) => void;
   onCreate: (p: Page) => void;
@@ -1254,6 +1385,21 @@ function PageTree({
             >
               <Plus size={13} />
             </button>
+            <ItemActions
+              label={`Page actions for ${p.Title}`}
+              items={[
+                { label: "Edit page", run: () => onEdit(p) },
+                ...(userId && p.AuthorId === userId
+                  ? [
+                      {
+                        label: "Delete page",
+                        danger: true,
+                        run: () => onDelete(p),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
           {!collapsed.includes(p.Id) && (
             <div className="tree-children">

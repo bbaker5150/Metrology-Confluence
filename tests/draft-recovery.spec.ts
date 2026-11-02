@@ -162,9 +162,7 @@ test("a reload restores a new draft's metadata and staged image, then publishes 
       ),
     )
     .toBeGreaterThan(0);
-  await reopened
-    .getByRole("button", { name: "Publish page", exact: true })
-    .click();
+  await reopened.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Recovered calibration note",
@@ -221,6 +219,9 @@ test("explicitly discarding unsaved work removes its recovery copy and it stays 
   await expect
     .poll(() => recoveryTitles(page))
     .toEqual(["Intentionally discarded draft"]);
+  await editor
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
   await editor
     .getByRole("button", { name: "Close editor", exact: true })
     .click();

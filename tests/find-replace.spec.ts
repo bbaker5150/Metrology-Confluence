@@ -121,7 +121,7 @@ test("find avoids attributes and paragraph boundaries, and replacement stays lit
   await finder
     .getByRole("button", { name: "Close find and replace", exact: true })
     .click();
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Literal replacement persists",

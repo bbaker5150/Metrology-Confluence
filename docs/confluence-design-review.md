@@ -97,3 +97,15 @@ Create, Search, and Theme use matching icon buttons in that order, with accessib
 The metadata layout no longer overrides avatar centering, and native select options explicitly use the theme's foreground and surface colors. Existing browser checks cover the edit menu path, icon order and sizing, dark option colors, and mobile navigation after the header is removed.
 
 Updated captures show the [page action menu](previews/page-actions.webp), [dark dropdown](previews/dark-dropdown.webp), and [mobile reading view](previews/mobile-reader.webp).
+
+## Second Tasking.docx pass
+
+The follow-up task sheet supplies Confluence screenshots and eleven concrete changes. Reading and editing now both suppress the global header. The editor uses one Publish/Update split button; its menu explains publishing, shared Draft status, and closing without saving. Frequently used content controls are available directly on the toolbar. The icon-only + menu retains specialist blocks, removes row arrows, and has a fixed heading/search with one scrolling results region.
+
+Tables use a hover/focus size grid, keyboard navigation, optional header row, and custom dimensions. Unicode emoji and technical symbols are grouped and searchable, with recent selections and supported skin tones. Everything is bundled; there are no emoji CDN requests. Twenty grouped templates cover calibration, uncertainty, equipment, corrective action, architecture, requirements, validation, handover, release notes, incidents, onboarding, meetings, team updates, retrospectives, how-to guides, and reference material.
+
+Spaces gain card/sidebar action menus and a color chooser. Renaming retains IDs and links. Space deletion requires an empty space, checked again by the service, and uses SharePoint recycle; it never cascades through pages. Tree page actions retain shared editing and native-creator-only deletion. No list schema or group permission changes are needed.
+
+Word export generates a genuine DOCX locally, preserving common document structures and embedding readable page images. Unavailable/external images are represented explicitly by descriptions and source links. Tests inspect the exported OOXML package and image parts as well as the browser download. Browser checks cover the new controls, mobile navigation, shared Draft semantics, space management, and creator-only tree deletion; service tests cover digest-backed updates, denials, page membership, and uncertain recycle results.
+
+Updated previews: [Update menu](previews/update-menu.webp), [table picker](previews/table-picker.webp), [emoji picker](previews/emoji-picker.webp), [insert menu](previews/insert-menu.webp), [space actions](previews/space-actions.webp), and [mobile insertion](previews/mobile-insert.webp).

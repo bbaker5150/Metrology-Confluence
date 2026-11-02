@@ -241,9 +241,7 @@ test("a member with the creator's display name can read, edit, and create pages 
   await editor
     .getByRole("textbox", { name: "Article content" })
     .fill("Updated collaboratively by another team member.");
-  await editor
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await editor.getByRole("button", { name: "Update", exact: true }).click();
   await expect(page.locator(".article-content")).toContainText(
     "Updated collaboratively by another team member.",
   );
@@ -260,9 +258,7 @@ test("a member with the creator's display name can read, edit, and create pages 
   await create
     .getByRole("textbox", { name: "Article content" })
     .fill("A new shared procedure.");
-  await create
-    .getByRole("button", { name: "Publish page", exact: true })
-    .click();
+  await create.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "A member's new procedure",

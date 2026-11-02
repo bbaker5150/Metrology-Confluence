@@ -13,8 +13,16 @@ test("dragged table column widths survive publishing, reload, and reopening the 
   await editor.fill("Measurement results");
   await editor.press("End");
   await editor.press("Enter");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
-  await page.getByRole("button", { name: /^Table Organize/ }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Insert content", exact: true })
+    .getByRole("button", { name: /^Table Choose/ })
+    .click();
+  await page
+    .getByRole("button", { name: "3 columns by 3 rows", exact: true })
+    .click();
   const firstCell = editor.locator("th").first();
   await firstCell.click();
   await page.keyboard.type("Reference standard");
@@ -30,7 +38,7 @@ test("dragged table column widths survive publishing, reload, and reopening the 
   await expect(firstCell).toHaveAttribute("colwidth", /^\d+$/);
   const width = Number(await firstCell.getAttribute("colwidth"));
   expect(width).toBeGreaterThan(box!.width + 40);
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Resized calibration table",

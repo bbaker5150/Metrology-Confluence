@@ -24,7 +24,7 @@ test("Markdown heading links retain the article route and page links navigate", 
     .fill(
       "[Jump to procedure](#procedure)\n\n[Open related article](#page=1)\n\n## Procedure\n\nFollow the documented steps.",
     );
-  await page.getByRole("button", { name: "Publish page" }).click();
+  await page.getByRole("button", { name: "Publish" }).click();
   await expect(
     page.getByRole("heading", {
       name: "Article anchor navigation",

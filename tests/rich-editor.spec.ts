@@ -26,8 +26,13 @@ test("visual editor preserves formatting, metrology symbols, tables, and languag
   await page
     .getByRole("button", { name: "Bold (Ctrl+B)", exact: true })
     .click();
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
-  await page.getByRole("button", { name: /Symbols & emoji/ }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Insert content", exact: true })
+    .getByRole("button", { name: /Symbols & emoji/ })
+    .click();
   await page
     .getByRole("textbox", { name: "Search symbols" })
     .fill("plus or minus");
@@ -38,8 +43,16 @@ test("visual editor preserves formatting, metrology symbols, tables, and languag
   await page.keyboard.type(" 0.01 mm");
   await editor.press("End");
   await editor.press("Enter");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
-  await page.getByRole("button", { name: /^Table Organize/ }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Insert content", exact: true })
+    .getByRole("button", { name: /^Table Choose/ })
+    .click();
+  await page
+    .getByRole("button", { name: "3 columns by 3 rows", exact: true })
+    .click();
   await editor.locator("th").first().click();
   await page.keyboard.type("Reference");
   await page.getByRole("button", { name: "Row", exact: true }).click();
@@ -48,7 +61,9 @@ test("visual editor preserves formatting, metrology symbols, tables, and languag
   await editor.press("Control+End");
   await editor.press("ArrowDown");
   await editor.press("Enter");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await page.getByRole("button", { name: /^Code block/ }).click();
   const code = editor.locator("pre");
   await expect(code).toBeVisible();
@@ -59,7 +74,7 @@ test("visual editor preserves formatting, metrology symbols, tables, and languag
   await page
     .getByLabel("Code language", { exact: true })
     .selectOption("javascript");
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Rich measurement guide", exact: true }),
   ).toBeVisible();
@@ -105,7 +120,7 @@ test("an image staged in a new visual page is attached, rendered, and editable a
     .getByLabel("Image description", { exact: true })
     .fill("Calibration reference target");
   await page.getByLabel("Image width", { exact: true }).selectOption("50%");
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Reference image procedure",
@@ -144,7 +159,9 @@ test("slash insertion works from the keyboard and Escape closes only the insert 
   await page.keyboard.type("info panel");
   await page.keyboard.press("Enter");
   await expect(editor.locator('[data-callout="info"]')).toBeVisible();
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await expect(
     page.getByRole("textbox", { name: "Search insert options" }),
   ).toBeVisible();
@@ -155,6 +172,9 @@ test("slash insertion works from the keyboard and Escape closes only the insert 
   await expect(
     page.getByRole("region", { name: "Create page", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(
     page.getByRole("heading", {
@@ -171,10 +191,15 @@ test("the editor close button closes the document even with an insertion panel o
   page,
 }) => {
   await createPage(page, "Unsaved work");
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Insert content", exact: true })
+    .click();
   await expect(
     page.getByRole("dialog", { name: "Insert content", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
   await page.getByRole("button", { name: "Close editor", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Discard unsaved changes?", exact: true })
@@ -204,6 +229,9 @@ test("opening an inline editor stays clean while changed content requires explic
   ).toBeEnabled();
   await expect(editor.locator(".rich-save-state")).toHaveText("No changes yet");
   await editor
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
+  await editor
     .getByRole("button", { name: "Close editor", exact: true })
     .click();
   await expect(editor).toHaveCount(0);
@@ -217,6 +245,9 @@ test("opening an inline editor stays clean while changed content requires explic
   await expect(editor.locator(".rich-save-state")).toHaveText(
     "Unsaved changes",
   );
+  await editor
+    .getByRole("button", { name: "Page save options", exact: true })
+    .click();
   await editor
     .getByRole("button", { name: "Close editor", exact: true })
     .click();
@@ -265,9 +296,7 @@ test("keeping edits during sidebar navigation preserves content and saves direct
   await expect(
     editor.getByRole("textbox", { name: "Article content" }),
   ).toHaveText("Preserved work from the inline editor.");
-  await editor
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await editor.getByRole("button", { name: "Update", exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(discard).toHaveCount(0);
   await expect(

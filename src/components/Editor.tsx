@@ -33,7 +33,7 @@ import {
   AlignRight,
   ArrowDown,
   ArrowLeft,
-  ArrowRight,
+  Menu,
   Bold,
   FileEdit,
   FileText,
@@ -83,6 +83,10 @@ import {
   toMarkdown,
 } from "../lib/content";
 import Modal from "./Modal";
+import TablePicker from "./TablePicker";
+import SymbolPicker from "./SymbolPicker";
+import UpdateMenu from "./UpdateMenu";
+import { templates, templateGroups } from "../data/templates";
 import Markdown from "./Markdown";
 import { useDraftRecovery } from "../hooks/useDraftRecovery";
 import { SearchReplace } from "../editor/findReplace";
@@ -106,74 +110,12 @@ type Props = {
     images?: PendingImage[],
   ) => Promise<void>;
   onCancel: () => void;
+  onOpenNavigation: () => void;
   onStateChange: (state: { dirty: boolean; busy: boolean }) => void;
   onDiscardRecoveryChange: (clear: (() => Promise<void>) | null) => void;
   onRecoveryWarning: (message: string) => void;
 };
-type Panel = "insert" | "symbol" | "image" | "link" | "more" | null;
-const templates: Record<string, { title: string; body: string }> = {
-  blank: { title: "Blank page", body: "" },
-  sop: {
-    title: "SOP / Runbook",
-    body: "## Purpose\n\nDescribe the outcome and when to use this procedure.\n\n## Scope & prerequisites\n\n- Required equipment\n- Responsible owner\n\n> [!WARNING]\n> Confirm equipment is safe and within its calibration interval before proceeding.\n\n## Procedure\n\n1. Prepare the work area.\n2. Verify the reference standard.\n3. Perform and document the measurement.\n\n## Acceptance criteria\n\n| Check | Requirement | Result |\n| --- | --- | --- |\n| Reference validity | In date | Pending |\n\n## Records & review\n\n- [ ] Save the measurement record\n- [ ] Request an independent review",
-  },
-  troubleshooting: {
-    title: "Troubleshooting & root cause",
-    body: "## Symptoms\n\nDescribe the observed behavior and impact.\n\n## Initial checks\n\n- [ ] Record equipment identity and configuration\n- [ ] Confirm the reference and environment\n\n## Diagnosis\n\n| Observation | Possible cause | Next check |\n| --- | --- | --- |\n| Unexpected result | To investigate | Repeat independently |\n\n## Root cause\n\nDocument the evidence supporting the cause.\n\n> [!TIP]\n> Change one variable at a time and record each result.\n\n## Resolution & prevention\n\n1. Apply the verified correction.\n2. Confirm the original symptom is resolved.",
-  },
-  project: {
-    title: "Project / architecture overview",
-    body: "## Overview\n\nExplain the problem, goals, and intended users.\n\n## Scope\n\n### In scope\n\n- Deliverable\n\n### Out of scope\n\n- Deferred work\n\n## Architecture\n\nDescribe the components and their interfaces.\n\n> [!DECISION]\n> Record an architecture decision and its rationale.\n\n## Milestones\n\n| Milestone | Owner | Target |\n| --- | --- | --- |\n| Design review | Unassigned | TBD |\n\n## Risks & open questions\n\n- [ ] Resolve the outstanding dependency",
-  },
-  meeting: {
-    title: "Meeting notes & action items",
-    body: "## Meeting details\n\n**Date:**\n\n**Participants:**\n\n## Agenda\n\n1. Progress since last meeting\n2. Decisions and blockers\n3. Next steps\n\n## Discussion\n\nCapture the key context.\n\n> [!DECISION]\n> Summarize the agreed decision.\n\n## Action items\n\n- [ ] Action — owner — due date\n\n## Next meeting\n\nDate and proposed topics.",
-  },
-};
-const symbols = [
-  ["±", "Plus or minus", "Measurement"],
-  ["µ", "Micro mu", "Measurement"],
-  ["Ω", "Ohm omega", "Measurement"],
-  ["°", "Degree", "Measurement"],
-  ["Δ", "Delta change", "Measurement"],
-  ["σ", "Sigma standard deviation", "Measurement"],
-  ["Σ", "Sum sigma", "Measurement"],
-  ["λ", "Lambda wavelength", "Measurement"],
-  ["π", "Pi", "Measurement"],
-  ["ρ", "Rho density", "Measurement"],
-  ["τ", "Tau time constant", "Measurement"],
-  ["α", "Alpha", "Measurement"],
-  ["β", "Beta", "Measurement"],
-  ["θ", "Theta angle", "Measurement"],
-  ["φ", "Phi phase", "Measurement"],
-  ["ε", "Epsilon error", "Measurement"],
-  ["≤", "Less than or equal", "Math"],
-  ["≥", "Greater than or equal", "Math"],
-  ["≠", "Not equal", "Math"],
-  ["≈", "Approximately equal", "Math"],
-  ["∞", "Infinity", "Math"],
-  ["√", "Square root", "Math"],
-  ["×", "Multiply", "Math"],
-  ["÷", "Divide", "Math"],
-  ["∫", "Integral", "Math"],
-  ["∂", "Partial derivative", "Math"],
-  ["²", "Squared", "Math"],
-  ["³", "Cubed", "Math"],
-  ["→", "Right arrow", "Math"],
-  ["↔", "Bidirectional arrow", "Math"],
-  ["✅", "Check complete", "Emoji"],
-  ["⚠️", "Warning caution", "Emoji"],
-  ["💡", "Idea tip", "Emoji"],
-  ["📌", "Pin important", "Emoji"],
-  ["🔬", "Microscope lab", "Emoji"],
-  ["🧪", "Test tube", "Emoji"],
-  ["📋", "Clipboard checklist", "Emoji"],
-  ["🔧", "Wrench repair", "Emoji"],
-  ["🎯", "Target goal", "Emoji"],
-  ["🚀", "Rocket launch", "Emoji"],
-  ["📎", "Attachment paperclip", "Emoji"],
-  ["📝", "Notes memo", "Emoji"],
-];
+type Panel = "insert" | "symbol" | "image" | "link" | "more" | "table" | null;
 const languages = [
   ["text", "Plain text"],
   ["python", "Python"],
@@ -252,6 +194,7 @@ export default function Editor({
   pages = [],
   onSave,
   onCancel,
+  onOpenNavigation,
   onStateChange,
   onDiscardRecoveryChange,
   onRecoveryWarning,
@@ -300,6 +243,50 @@ export default function Editor({
     canvasRef = useRef<HTMLDivElement>(null),
     titleRef = useRef<HTMLTextAreaElement>(null),
     previewPosition = useRef({ from: 1, to: 1, scroll: 0 });
+  const workspaceRef = useRef<HTMLFieldSetElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState({
+    top: 53,
+    left: 26,
+    maxHeight: 440,
+  });
+  useLayoutEffect(() => {
+    if (!panel || !workspaceRef.current || !popoverRef.current) return;
+    const workspace = workspaceRef.current;
+    const toolbar = workspace.querySelector<HTMLElement>(".rich-toolbar")!;
+    const labels = {
+      insert: "Insert content",
+      symbol: "Symbols & emoji",
+      table: "Insert table",
+      image: "Insert image",
+      link: "Insert link",
+      more: "More formatting",
+    };
+    const position = () => {
+      const rect = workspace.getBoundingClientRect();
+      const trigger = toolbar
+        .querySelector<HTMLElement>(`[aria-label="${labels[panel]}"]`)
+        ?.getBoundingClientRect();
+      const top = toolbar.getBoundingClientRect().bottom - rect.top + 5;
+      const width = popoverRef.current?.offsetWidth || 350;
+      setPopoverPosition({
+        top,
+        left: Math.max(
+          8,
+          Math.min(
+            (trigger?.left || rect.left) - rect.left,
+            workspace.clientWidth - width - 8,
+          ),
+        ),
+        maxHeight: Math.max(0, Math.min(500, workspace.clientHeight - top - 8)),
+      });
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(workspace);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [panel]);
   const field = useRef<HTMLInputElement>(null),
     uploads = useRef(new Set<string>()),
     selection = useRef({ from: 1, to: 1 }),
@@ -917,16 +904,9 @@ export default function Editor({
     },
     {
       name: "Table",
-      hint: "Organize information into rows",
+      hint: "Choose the number of columns and rows",
       icon: <Table2 size={19} />,
-      run: () =>
-        command(() =>
-          editor
-            ?.chain()
-            .focus()
-            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-            .run(),
-        ),
+      run: () => setPanel("table"),
     },
     {
       name: "Action list",
@@ -967,9 +947,6 @@ export default function Editor({
     },
   ].filter((item) =>
     `${item.name} ${item.hint}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  const pickerSymbols = symbols.filter(([symbol, name, category]) =>
-    `${symbol} ${name} ${category}`.toLowerCase().includes(query.toLowerCase()),
   );
   const activeHeading = editor?.isActive("heading")
     ? String(editor.getAttributes("heading").level)
@@ -1028,6 +1005,14 @@ export default function Editor({
         }}
       >
         <header className="rich-page-actions">
+          <button
+            type="button"
+            className="icon-button mobile-menu"
+            aria-label="Open navigation"
+            onClick={onOpenNavigation}
+          >
+            <Menu size={19} />
+          </button>
           <div className="rich-page-actions-right">
             {preview ? (
               <button
@@ -1118,38 +1103,17 @@ export default function Editor({
                 )}
               </div>
             )}
-            <button
-              type="button"
-              className="button rich-close-editor"
-              disabled={busy}
-              onClick={onCancel}
-              aria-label="Close editor"
-            >
-              Close
-            </button>
-            <div className="rich-save-actions">
-              <button
-                type="button"
-                className="button"
-                disabled={busy || retryBlocked}
-                onClick={() => save("Draft")}
-              >
-                Save draft
-              </button>
-              <button
-                type="button"
-                className="button primary"
-                disabled={busy || retryBlocked}
-                onClick={() => save("Published")}
-              >
-                <Check size={16} />
-                {busy
-                  ? "Saving…"
-                  : basePage.Status === "Published"
-                    ? "Save changes"
-                    : "Publish page"}
-              </button>
-            </div>
+            <UpdateMenu
+              onOpen={() => {
+                setPanel(null);
+                setToolsOpen(false);
+              }}
+              published={basePage.Status === "Published"}
+              busy={busy}
+              blocked={retryBlocked}
+              onSave={(status) => void save(status)}
+              onClose={onCancel}
+            />
           </div>
         </header>
         {recoveryCandidate && (
@@ -1279,10 +1243,14 @@ export default function Editor({
                   value={template in templates ? template : "blank"}
                   onChange={(event) => chooseTemplate(event.target.value)}
                 >
-                  {Object.entries(templates).map(([key, value]) => (
-                    <option key={key} value={key}>
-                      {value.title}
-                    </option>
+                  {templateGroups.map((group) => (
+                    <optgroup key={group.name} label={group.name}>
+                      {group.keys.map((key) => (
+                        <option key={key} value={key}>
+                          {templates[key].title}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>
@@ -1461,6 +1429,7 @@ export default function Editor({
         )}
         <fieldset
           className="rich-workspace"
+          ref={workspaceRef}
           hidden={preview}
           disabled={busy}
           aria-label="Page content and formatting"
@@ -1598,8 +1567,45 @@ export default function Editor({
               >
                 <Link2 size={17} />
               </Tool>
-              <Tool label="Insert image" onClick={() => open("image")}>
+              <Tool
+                locked={busy || sourceMode}
+                label="Insert image"
+                onClick={() => open("image")}
+              >
                 <ImagePlus size={18} />
+              </Tool>
+              <Tool
+                locked={busy || sourceMode}
+                label="Symbols & emoji"
+                active={panel === "symbol"}
+                onClick={() => open("symbol")}
+              >
+                <Smile size={18} />
+              </Tool>
+              <Tool
+                locked={busy || sourceMode}
+                label="Insert table"
+                active={panel === "table"}
+                onClick={() => open("table")}
+              >
+                <Table2 size={18} />
+              </Tool>
+              <Tool
+                locked={busy || sourceMode}
+                label="Insert code block"
+                onClick={() => {
+                  selection.current = {
+                    from: editor!.state.selection.from,
+                    to: editor!.state.selection.to,
+                  };
+                  insert({
+                    type: "codeBlock",
+                    attrs: { language: "text" },
+                    content: [{ type: "text", text: "Your code here" }],
+                  });
+                }}
+              >
+                <Code2 size={18} />
               </Tool>
             </div>
             <button
@@ -1609,10 +1615,10 @@ export default function Editor({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => open("insert")}
               aria-expanded={panel === "insert"}
+              aria-label="Insert content"
+              title="Insert content"
             >
-              <Plus size={16} />
-              Insert
-              <ChevronDown size={13} />
+              <Plus size={18} />
             </button>
             {sourceMode && (
               <button
@@ -1869,6 +1875,8 @@ export default function Editor({
           {panel && (
             <div
               className={`rich-popover rich-popover-${panel}`}
+              ref={popoverRef}
+              style={popoverPosition}
               data-editor-popover="true"
               role="dialog"
               aria-label={
@@ -1880,7 +1888,9 @@ export default function Editor({
                       ? "Insert image"
                       : panel === "link"
                         ? "Edit link"
-                        : "More formatting"
+                        : panel === "table"
+                          ? "Insert table"
+                          : "More formatting"
               }
             >
               <div className="rich-popover-heading">
@@ -1893,7 +1903,9 @@ export default function Editor({
                         ? "Add an image"
                         : panel === "link"
                           ? "Add a link"
-                          : "More formatting"}
+                          : panel === "table"
+                            ? "Insert table"
+                            : "More formatting"}
                 </strong>
                 <button
                   type="button"
@@ -1906,46 +1918,40 @@ export default function Editor({
                   <X size={16} />
                 </button>
               </div>
-              {(panel === "insert" || panel === "symbol") && (
+              {panel === "insert" && (
                 <div className="rich-picker-search">
                   <Search size={16} />
                   <input
                     autoFocus
-                    aria-label={
-                      panel === "symbol"
-                        ? "Search symbols"
-                        : "Search insert options"
-                    }
-                    placeholder={
-                      panel === "symbol"
-                        ? "Search symbols or emoji…"
-                        : "Find something to insert…"
-                    }
+                    aria-label="Search insert options"
+                    placeholder="Find something to insert…"
                     value={query}
                     onChange={(event) => {
                       setQuery(event.target.value);
                       setMenuIndex(0);
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === "ArrowDown") {
+                      if (
+                        event.key === "ArrowDown" ||
+                        event.key === "ArrowUp"
+                      ) {
                         event.preventDefault();
-                        setMenuIndex((n) =>
+                        const next = Math.max(
+                          0,
                           Math.min(
-                            n + 1,
-                            (panel === "symbol" ? pickerSymbols : inserts)
-                              .length - 1,
+                            inserts.length - 1,
+                            menuIndex + (event.key === "ArrowDown" ? 1 : -1),
                           ),
                         );
-                      }
-                      if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        setMenuIndex((n) => Math.max(0, n - 1));
+                        setMenuIndex(next);
+                        event.currentTarget
+                          .closest("[data-editor-popover]")
+                          ?.querySelectorAll(".rich-insert-list button")
+                          [next]?.scrollIntoView({ block: "nearest" });
                       }
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        if (panel === "symbol" && pickerSymbols[menuIndex])
-                          insert(pickerSymbols[menuIndex][0]);
-                        else inserts[menuIndex]?.run();
+                        inserts[menuIndex]?.run();
                       }
                     }}
                   />
@@ -1966,33 +1972,25 @@ export default function Editor({
                         <strong>{item.name}</strong>
                         <small>{item.hint}</small>
                       </span>
-                      <ArrowRight size={14} />
                     </button>
                   ))}
                   {!inserts.length && <p>No matching insert options.</p>}
                 </div>
               )}
-              {panel === "symbol" && (
-                <>
-                  <div className="rich-symbol-grid">
-                    {pickerSymbols.map(([symbol, name], index) => (
-                      <button
-                        type="button"
-                        key={name}
-                        className={menuIndex === index ? "selected" : ""}
-                        title={name}
-                        aria-label={`Insert ${name}`}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => insert(symbol)}
-                      >
-                        {symbol}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="rich-popover-note">
-                    Select a symbol to insert it at your cursor.
-                  </p>
-                </>
+              {panel === "symbol" && <SymbolPicker onInsert={insert} />}
+              {panel === "table" && (
+                <TablePicker
+                  onInsert={(rows, cols, header) =>
+                    command(() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .setTextSelection(selection.current)
+                        .insertTable({ rows, cols, withHeaderRow: header })
+                        .run(),
+                    )
+                  }
+                />
               )}
               {panel === "image" && (
                 <>
