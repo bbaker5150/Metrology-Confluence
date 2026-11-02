@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight,
   Clock3,
@@ -12,6 +12,11 @@ import {
   Pin,
   Printer,
   RotateCcw,
+  Archive,
+  Bookmark,
+  BookmarkCheck,
+  Copy,
+  FolderInput,
   Send,
   Upload,
   MoreHorizontal,
@@ -19,11 +24,16 @@ import {
   Link as LinkIcon,
   Trash2,
 } from "lucide-react";
-import type { Attachment, Comment, Page, PageVersion, Space } from "../types";
+import type { Attachment, Comment, Page, Space } from "../types";
 import { PageDeletionError, service } from "../services/sharepointService";
 import Markdown, { extractHeadings, type Heading } from "./Markdown";
 import Modal from "./Modal";
 import { contentText, toMarkdown } from "../lib/content";
+import PageManagementDialog, {
+  type PageManagementAction,
+} from "./PageManagementDialog";
+import VersionHistory from "./VersionHistory";
+import ConnectedPages from "./ConnectedPages";
 
 type Props = {
   page: Page;
@@ -35,6 +45,11 @@ type Props = {
   onChanged: (page: Page) => void;
   onDeleted: (page: Page) => void;
   onToast: (message: string) => void;
+  onDuplicateCreated: (page: Page) => void;
+  saved: boolean;
+  savedAvailable: boolean;
+  onToggleSaved: () => void;
+  onBusyChange: (busy: boolean) => void;
 };
 function relative(value: string) {
   const days = Math.max(
@@ -83,12 +98,18 @@ export default function ArticleReader({
   onChanged,
   onDeleted,
   onToast,
+  onDuplicateCreated,
+  saved,
+  savedAvailable,
+  onToggleSaved,
+  onBusyChange,
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [versions, setVersions] = useState<PageVersion[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [preview, setPreview] = useState<PageVersion | null>(null);
+  const [managementAction, setManagementAction] =
+    useState<PageManagementAction | null>(null);
+  const [mutationBusy, setMutationBusy] = useState(false);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -108,6 +129,12 @@ export default function ArticleReader({
   const currentPageId = useRef(page.Id);
   currentPageId.current = page.Id;
   const canDelete = deletePermission === page.Id;
+  const archived = page.Status === "Archived";
+  const working = busy || deleting || mutationBusy;
+  useLayoutEffect(() => {
+    onBusyChange(working);
+  }, [working, onBusyChange]);
+  useLayoutEffect(() => () => onBusyChange(false), [onBusyChange]);
   useEffect(() => {
     let active = true;
     setDeletePermission(null);
@@ -166,9 +193,6 @@ export default function ArticleReader({
     }
     return result;
   }, [page, pages]);
-  const children = pages.filter(
-    (p) => p.ParentPageId === page.Id && p.Status !== "Archived",
-  );
   const childPageCount = pages.filter((p) => p.ParentPageId === page.Id).length;
   const readingMinutes = Math.max(
     1,
@@ -180,21 +204,14 @@ export default function ArticleReader({
     setError("");
     setComment("");
     setHistoryOpen(false);
-    setPreview(null);
     setComments([]);
     setAttachments([]);
-    setVersions([]);
-    Promise.all([
-      service.getComments(page.Id),
-      service.getAttachments(page.Id),
-      service.getVersions(page.Id),
-    ])
-      .then(([c, a, v]) => {
+    Promise.all([service.getComments(page.Id), service.getAttachments(page.Id)])
+      .then(([c, a]) => {
         if (active) {
           setComments(c);
           setAttachments(a);
           setAttachmentsOpen(a.length > 0);
-          setVersions(v);
         }
       })
       .catch((e) => {
@@ -242,7 +259,7 @@ export default function ArticleReader({
   }
   async function postComment() {
     const body = comment.trim();
-    if (busy || commentPending.current || !body) return;
+    if (working || archived || commentPending.current || !body) return;
     commentPending.current = true;
     try {
       await run(async () => {
@@ -363,7 +380,7 @@ export default function ArticleReader({
               className={`icon-button ${page.IsPinned ? "active" : ""}`}
               aria-label={page.IsPinned ? "Unpin page" : "Pin page"}
               title={page.IsPinned ? "Unpin page" : "Pin page"}
-              disabled={busy}
+              disabled={working || archived}
               onClick={() =>
                 run(async () => {
                   const updated = await service.savePage(
@@ -410,9 +427,46 @@ export default function ArticleReader({
               >
                 <button
                   type="button"
+                  disabled={working || !savedAvailable}
+                  aria-pressed={saved}
+                  onClick={onToggleSaved}
+                >
+                  {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                  {saved ? "Remove from saved pages" : "Save for later"}
+                </button>
+                <div className="reader-menu-divider" />
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setManagementAction("duplicate")}
+                >
+                  <Copy size={16} />
+                  Duplicate page
+                </button>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setManagementAction("move")}
+                >
+                  <FolderInput size={16} />
+                  Move page
+                </button>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() =>
+                    setManagementAction(archived ? "restore" : "archive")
+                  }
+                >
+                  {archived ? <RotateCcw size={16} /> : <Archive size={16} />}
+                  {archived ? "Restore archived page" : "Archive page"}
+                </button>
+                <div className="reader-menu-divider" />
+                <button
+                  type="button"
+                  disabled={working}
                   onClick={() => {
                     setHistoryOpen(true);
-                    setPreview(versions[0] || null);
                   }}
                 >
                   <History size={16} />
@@ -449,7 +503,7 @@ export default function ArticleReader({
                     <button
                       type="button"
                       className="reader-delete-action"
-                      disabled={busy || deleting}
+                      disabled={working}
                       onClick={() => setDeleteDialogPage(page.Id)}
                     >
                       <Trash2 size={16} />
@@ -459,7 +513,12 @@ export default function ArticleReader({
                 )}
               </div>
             </details>
-            <button type="button" className="button primary" onClick={onEdit}>
+            <button
+              type="button"
+              className="button primary"
+              disabled={working || archived}
+              onClick={onEdit}
+            >
               <Edit3 size={15} />
               Edit page
             </button>
@@ -503,6 +562,16 @@ export default function ArticleReader({
           </div>
         )}
       </header>
+      {archived && (
+        <div className="archived-page-notice">
+          <Archive size={17} />
+          <span>
+            This page is archived. Use{" "}
+            <strong>More page actions → Restore archived page</strong> to
+            continue editing.
+          </span>
+        </div>
+      )}
       {error && (
         <div className="error-banner" role="alert">
           {error}
@@ -515,23 +584,12 @@ export default function ArticleReader({
               content={page.Content || "*This page has no content yet.*"}
             />
           </div>
-          {children.length > 0 && (
-            <section className="child-pages">
-              <h2>In this section</h2>
-              {children.map((child) => (
-                <button
-                  type="button"
-                  className="child-page-link"
-                  key={child.Id}
-                  onClick={() => onNavigate(child.Id)}
-                >
-                  <File size={16} />
-                  <span>{child.Title}</span>
-                  <ChevronRight size={16} />
-                </button>
-              ))}
-            </section>
-          )}
+          <ConnectedPages
+            page={page}
+            pages={pages}
+            spaces={spaces}
+            onNavigate={onNavigate}
+          />
           <section className="attachments-section">
             <div className="section-heading">
               <button
@@ -547,7 +605,7 @@ export default function ArticleReader({
               <button
                 type="button"
                 className="button small"
-                disabled={busy || loading}
+                disabled={working || loading || archived}
                 onClick={() => fileInput.current?.click()}
               >
                 <Upload size={15} />
@@ -558,10 +616,11 @@ export default function ArticleReader({
                 className="visually-hidden"
                 type="file"
                 multiple
+                disabled={working || archived}
                 aria-label="Upload attachments"
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
-                  if (!files.length) return;
+                  if (!files.length || working || archived) return;
                   void run(async () => {
                     for (const file of files) {
                       await service.uploadAttachment(page.Id, file);
@@ -628,8 +687,9 @@ export default function ArticleReader({
                 </div>
               ) : (
                 <p className="empty-inline">
-                  Add reference files, diagrams, or supporting images to this
-                  page.
+                  {archived
+                    ? "No files were attached to this page."
+                    : "Add reference files, diagrams, or supporting images to this page."}
                 </p>
               ))}
           </section>
@@ -650,17 +710,21 @@ export default function ArticleReader({
               </label>
               <textarea
                 id="page-comment"
-                readOnly={busy}
+                readOnly={working || archived}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Add to the discussion…"
+                placeholder={
+                  archived
+                    ? "Restore this page to add a comment."
+                    : "Add to the discussion…"
+                }
                 rows={3}
                 maxLength={10000}
               />
               <button
                 type="button"
                 className="button primary small"
-                disabled={busy || !comment.trim()}
+                disabled={working || archived || !comment.trim()}
                 onClick={(event) => {
                   // Sandboxed SharePoint hosts may block native form submission.
                   event.preventDefault();
@@ -798,106 +862,34 @@ export default function ArticleReader({
           </div>
         </Modal>
       )}
-      {historyOpen && (
-        <Modal
-          title="Version history"
-          wide
-          onClose={() => {
-            if (!busy) {
-              setHistoryOpen(false);
-              setPreview(null);
-            }
+      {managementAction && (
+        <PageManagementDialog
+          action={managementAction}
+          page={page}
+          pages={pages}
+          spaces={spaces}
+          onClose={() => setManagementAction(null)}
+          onChanged={onChanged}
+          onDuplicateCreated={onDuplicateCreated}
+          onNavigate={(id) => {
+            onBusyChange(false);
+            onNavigate(id);
           }}
-        >
-          <div className="version-layout">
-            <div className="version-list">
-              <p className="muted">
-                Every saved revision is a restore point. Restoring creates a new
-                version.
-              </p>
-              {loading && <p>Loading versions…</p>}
-              {!loading && !versions.length && (
-                <p className="empty-inline">
-                  No revision snapshots are available.
-                </p>
-              )}
-              {[...versions]
-                .sort((a, b) => b.VersionNumber - a.VersionNumber)
-                .map((version) => (
-                  <button
-                    type="button"
-                    className={`version-item ${preview?.Id === version.Id ? "active" : ""}`}
-                    key={version.Id}
-                    onClick={() => setPreview(version)}
-                  >
-                    <strong>
-                      Version {version.VersionNumber}
-                      {version.VersionNumber === page.VersionCount
-                        ? " · Current"
-                        : ""}
-                    </strong>
-                    <span>{version.ChangeNote || "Page saved"}</span>
-                    <small>
-                      {version.EditedBy} · {date(version.Created)}
-                    </small>
-                  </button>
-                ))}
-            </div>
-            <div className="version-preview">
-              {preview ? (
-                <>
-                  <div className="section-heading">
-                    <h3>{preview.TitleSnapshot}</h3>
-                    <button
-                      type="button"
-                      className="button small"
-                      disabled={
-                        busy || preview.VersionNumber === page.VersionCount
-                      }
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Restore version ${preview.VersionNumber} as a new revision?`,
-                          )
-                        )
-                          void run(async () => {
-                            const updated = await service.restoreVersion(
-                              page,
-                              preview,
-                            );
-                            onChanged(updated);
-                            setHistoryOpen(false);
-                            setPreview(null);
-                            onToast(
-                              "Previous version restored as a new revision.",
-                            );
-                          });
-                      }}
-                    >
-                      <RotateCcw size={14} />
-                      Restore
-                    </button>
-                  </div>
-                  <Markdown
-                    idPrefix="revision-"
-                    content={preview.ContentSnapshot}
-                  />
-                </>
-              ) : (
-                <div className="empty-state">
-                  <History size={28} />
-                  <h3>Select a revision</h3>
-                  <p>Preview the article before restoring it.</p>
-                </div>
-              )}
-            </div>
-          </div>
-          {error && (
-            <p className="error-banner" role="alert">
-              {error}
-            </p>
-          )}
-        </Modal>
+          onToast={onToast}
+          onBusyChange={setMutationBusy}
+        />
+      )}
+      {historyOpen && (
+        <VersionHistory
+          page={page}
+          onClose={() => setHistoryOpen(false)}
+          onBusyChange={setMutationBusy}
+          onRestored={(updated) => {
+            onChanged(updated);
+            setHistoryOpen(false);
+            onToast("Previous version restored as a new revision.");
+          }}
+        />
       )}
     </article>
   );

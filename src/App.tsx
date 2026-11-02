@@ -19,6 +19,8 @@ import {
   FolderOpen,
   CheckCircle2,
   ArrowRight,
+  Bookmark,
+  Archive,
 } from "lucide-react";
 import { service } from "./services/sharepointService";
 import { savePageWithImages } from "./services/imageSave";
@@ -29,8 +31,17 @@ import Modal from "./components/Modal";
 import Editor from "./components/Editor";
 import ArticleReader from "./components/ArticleReader";
 import GroupAccessPanel from "./components/GroupAccessPanel";
+import { useSavedPages } from "./hooks/useSavedPages";
 
-type View = "home" | "space" | "pinned" | "recent" | "drafts" | "tag";
+type View =
+  | "home"
+  | "space"
+  | "pinned"
+  | "recent"
+  | "drafts"
+  | "tag"
+  | "saved"
+  | "archived";
 const relative = (date: string) => {
   const days = Math.max(
     0,
@@ -61,6 +72,9 @@ function Highlight({ text, query }: { text: string; query: string }) {
   );
 }
 export default function App() {
+  const savedPages = useSavedPages();
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [librarySort, setLibrarySort] = useState("updated");
   const [spaces, setSpaces] = useState<Space[]>([]),
     [pages, setPages] = useState<Page[]>([]),
     [user, setUser] = useState(""),
@@ -84,6 +98,10 @@ export default function App() {
     [createOpen, setCreateOpen] = useState(false);
   const createRef = useRef<HTMLDivElement>(null);
   const editorState = useRef({ dirty: false, busy: false });
+  const readerBusy = useRef(false);
+  const reportReaderBusy = useCallback((busy: boolean) => {
+    readerBusy.current = busy;
+  }, []);
   const discardEditorRecovery = useRef<(() => Promise<void>) | null>(null);
   const editorOpen = useRef(false);
   editorOpen.current = Boolean(editor);
@@ -112,6 +130,22 @@ export default function App() {
     }
   });
   const notify = useCallback((message: string) => setToast(message), []);
+  const toggleSaved = async (id: number) => {
+    try {
+      const saved = await savedPages.toggle(id);
+      notify(
+        saved
+          ? "Saved for later in this browser."
+          : "Removed from your saved pages.",
+      );
+    } catch (failure) {
+      notify(
+        failure instanceof Error
+          ? failure.message
+          : "Your saved pages could not be updated.",
+      );
+    }
+  };
   const finishEditing = useCallback(() => {
     editorState.current = { dirty: false, busy: false };
     editorOpen.current = false;
@@ -122,6 +156,10 @@ export default function App() {
       setCreateOpen(false);
       setSearch(false);
       setMobile(false);
+      if (readerBusy.current) {
+        notify("Please wait for the page operation to finish before leaving.");
+        return;
+      }
       if (editorOpen.current && editorState.current.busy) {
         notify("Your page is still saving. Please wait before leaving.");
         return;
@@ -188,7 +226,8 @@ export default function App() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (!admin && !newSpace && !discardOpen) setSearch((v) => !v);
+        if (!admin && !newSpace && !discardOpen && !readerBusy.current)
+          setSearch((v) => !v);
       }
     };
     window.addEventListener("keydown", h);
@@ -198,7 +237,7 @@ export default function App() {
     const h = () => {
       const nextHash = location.hash;
       if (nextHash === currentHash.current) return;
-      if (editorOpen.current) {
+      if (editorOpen.current || readerBusy.current) {
         history.replaceState(
           null,
           "",
@@ -222,6 +261,15 @@ export default function App() {
     return () => window.removeEventListener("hashchange", h);
   }, [transition]);
   useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (!readerBusy.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, []);
+  useEffect(() => {
     if (!createOpen) return;
     const h = (e: PointerEvent) => {
       if (!createRef.current?.contains(e.target as Node)) setCreateOpen(false);
@@ -241,6 +289,7 @@ export default function App() {
   const navigate = (id: number) => transition(() => navigateNow(id));
   const go = (next: View, id?: number) =>
     transition(() => {
+      setLibraryQuery("");
       setView(next);
       setSpaceId(id);
       setPageId(0);
@@ -280,39 +329,67 @@ export default function App() {
   const live = pages.filter((p) => p.Status !== "Archived"),
     pinned = live.filter((p) => p.IsPinned);
   const tags = Array.from(new Set(live.flatMap((p) => p.Tags))).sort();
-  const visible = live
+  const visible = (
+    view === "archived"
+      ? pages.filter((p) => p.Status === "Archived")
+      : view === "saved"
+        ? pages
+        : live
+  )
     .filter((p) =>
       view === "space"
         ? p.SpaceId === spaceId
         : view === "pinned"
           ? p.IsPinned
-          : view === "drafts"
-            ? p.Status === "Draft" && p.AuthorName === user
-            : view === "tag"
-              ? p.Tags.includes(tag)
-              : true,
+          : view === "saved"
+            ? savedPages.savedIds.has(p.Id)
+            : view === "drafts"
+              ? p.Status === "Draft" && p.AuthorId === savedPages.userId
+              : view === "tag"
+                ? p.Tags.includes(tag)
+                : true,
     )
-    .sort((a, b) => b.Modified.localeCompare(a.Modified));
+    .filter(
+      (p) =>
+        view === "home" ||
+        !libraryQuery.trim() ||
+        `${p.Title} ${p.Summary} ${p.Tags.join(" ")} ${p.AuthorName} ${p.LastEditorName}`
+          .toLowerCase()
+          .includes(libraryQuery.trim().toLowerCase()),
+    )
+    .sort((a, b) =>
+      view !== "home" && librarySort === "title"
+        ? a.Title.localeCompare(b.Title, undefined, { sensitivity: "base" })
+        : view !== "home" && librarySort === "oldest"
+          ? a.Modified.localeCompare(b.Modified)
+          : b.Modified.localeCompare(a.Modified),
+    );
   const title =
     view === "home"
       ? "Knowledge home"
       : view === "space"
         ? space?.Title
-        : view === "pinned"
-          ? "Pinned pages"
-          : view === "recent"
-            ? "Recently updated"
-            : view === "drafts"
-              ? "My drafts"
-              : `#${tag}`;
+        : view === "saved"
+          ? "Saved for later"
+          : view === "archived"
+            ? "Archived pages"
+            : view === "pinned"
+              ? "Pinned pages"
+              : view === "recent"
+                ? "Recently updated"
+                : view === "drafts"
+                  ? "My drafts"
+                  : `#${tag}`;
   const navItems = [
     { key: "home" as View, label: "Home", icon: Home },
     { key: "recent" as View, label: "Recently updated", icon: Clock3 },
     { key: "pinned" as View, label: "Pinned pages", icon: Pin },
+    { key: "saved" as View, label: "Saved for later", icon: Bookmark },
     { key: "drafts" as View, label: "My drafts", icon: FileEdit },
+    { key: "archived" as View, label: "Archived pages", icon: Archive },
   ];
   const totalDrafts = live.filter(
-    (p) => p.Status === "Draft" && p.AuthorName === user,
+    (p) => p.Status === "Draft" && p.AuthorId === savedPages.userId,
   ).length;
   const list = (items: Page[]) => (
     <div className="document-list">
@@ -695,8 +772,21 @@ export default function App() {
               onNavigate={navigate}
               onSpace={(id) => go("space", id)}
               onEdit={() => startEditor(page)}
+              onBusyChange={reportReaderBusy}
+              onDuplicateCreated={(copy) => {
+                changed(copy);
+                navigateNow(copy.Id);
+                startEditor(copy);
+                notify(
+                  "Draft copy created with its own attachments. You can edit it here.",
+                );
+              }}
+              saved={savedPages.savedIds.has(page.Id)}
+              savedAvailable={savedPages.available}
+              onToggleSaved={() => void toggleSaved(page.Id)}
               onChanged={changed}
               onDeleted={(deleted) => {
+                readerBusy.current = false;
                 setPages((current) =>
                   current.filter((item) => item.Id !== deleted.Id),
                 );
@@ -741,15 +831,31 @@ export default function App() {
                     ? "A home for the knowledge that moves your team forward."
                     : view === "space"
                       ? space?.Description
-                      : view === "drafts"
-                        ? "Pick up where you left off. Your unpublished work lives here."
-                        : view === "pinned"
-                          ? "The references your team wants to keep close."
-                          : view === "recent"
-                            ? "Follow what’s new and what’s changed."
-                            : "Explore related guidance, decisions, and procedures."}
+                      : view === "saved"
+                        ? "Your personal reading list, saved in this browser."
+                        : view === "archived"
+                          ? "Retired pages stay available here. Open a page to restore it."
+                          : view === "drafts"
+                            ? "Pick up where you left off. Your unpublished work lives here."
+                            : view === "pinned"
+                              ? "The references your team wants to keep close."
+                              : view === "recent"
+                                ? "Follow what’s new and what’s changed."
+                                : "Explore related guidance, decisions, and procedures."}
                 </p>
               </header>
+              {view === "saved" && savedPages.loading && (
+                <p className="muted" role="status">
+                  Opening your saved pages…
+                </p>
+              )}
+              {(view === "saved" ||
+                (view === "drafts" && !savedPages.userId)) &&
+                savedPages.error && (
+                  <p className="error-banner" role="alert">
+                    {savedPages.error}
+                  </p>
+                )}
               {view === "home" && (
                 <>
                   {!spaces.length ? (
@@ -864,7 +970,7 @@ export default function App() {
               )}
               {(spaces.length > 0 || view !== "home") && (
                 <div
-                  className={`workspace-library ${tags.length ? "with-topics" : ""}`}
+                  className={`workspace-library ${tags.length && view !== "saved" && view !== "archived" ? "with-topics" : ""}`}
                 >
                   <section className="activity-section">
                     <div className="workspace-section-heading">
@@ -879,50 +985,97 @@ export default function App() {
                         <span>The latest from across your spaces</span>
                       )}
                     </div>
+                    {view !== "home" && (
+                      <div className="library-toolbar">
+                        <label className="library-filter">
+                          <Search size={16} aria-hidden="true" />
+                          <input
+                            type="search"
+                            aria-label="Filter pages"
+                            placeholder="Filter titles, tags or authors…"
+                            value={libraryQuery}
+                            onChange={(event) =>
+                              setLibraryQuery(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (
+                                event.key === "Enter" &&
+                                !event.nativeEvent.isComposing
+                              )
+                                event.preventDefault();
+                            }}
+                          />
+                        </label>
+                        <label className="library-sort">
+                          Sort by
+                          <select
+                            aria-label="Sort pages"
+                            value={librarySort}
+                            onChange={(event) =>
+                              setLibrarySort(event.target.value)
+                            }
+                          >
+                            <option value="updated">Recently updated</option>
+                            <option value="title">Title A–Z</option>
+                            <option value="oldest">Oldest update</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
                     {visible.length ? (
                       list(visible.slice(0, view === "home" ? 6 : undefined))
                     ) : (
                       <div className="library-empty">
                         <FileText size={30} />
                         <h3>
-                          {view === "drafts"
-                            ? "You’re all caught up."
-                            : "Nothing here yet."}
+                          {libraryQuery.trim()
+                            ? "No matching pages."
+                            : view === "drafts"
+                              ? "You’re all caught up."
+                              : "Nothing here yet."}
                         </h3>
                         <p>
-                          {view === "drafts"
-                            ? "Drafts appear here when you save a page without publishing."
-                            : "Use Create → Page to add knowledge to this space."}
+                          {libraryQuery.trim()
+                            ? "Try another title, tag, or author."
+                            : view === "saved"
+                              ? "Open a page and choose More page actions → Save for later."
+                              : view === "archived"
+                                ? "Pages you archive will appear here, away from the active workspace."
+                                : view === "drafts"
+                                  ? "Drafts appear here when you save a page without publishing."
+                                  : "Use Create → Page to add knowledge to this space."}
                         </p>
                       </div>
                     )}
                   </section>
-                  {tags.length > 0 && (
-                    <aside className="topic-directory">
-                      <div className="workspace-section-heading">
-                        <h2>Explore topics</h2>
-                      </div>
-                      <p>Follow a thread of knowledge.</p>
-                      <div className="workspace-tag-list">
-                        {tags.slice(0, 24).map((t) => (
-                          <button
-                            type="button"
-                            className={`topic-chip ${view === "tag" && tag === t ? "active" : ""}`}
-                            key={t}
-                            onClick={() => {
-                              setTag(t);
-                              go("tag");
-                            }}
-                          >
-                            #{t}
-                            <span>
-                              {live.filter((p) => p.Tags.includes(t)).length}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </aside>
-                  )}
+                  {tags.length > 0 &&
+                    view !== "saved" &&
+                    view !== "archived" && (
+                      <aside className="topic-directory">
+                        <div className="workspace-section-heading">
+                          <h2>Explore topics</h2>
+                        </div>
+                        <p>Follow a thread of knowledge.</p>
+                        <div className="workspace-tag-list">
+                          {tags.slice(0, 24).map((t) => (
+                            <button
+                              type="button"
+                              className={`topic-chip ${view === "tag" && tag === t ? "active" : ""}`}
+                              key={t}
+                              onClick={() => {
+                                setTag(t);
+                                go("tag");
+                              }}
+                            >
+                              #{t}
+                              <span>
+                                {live.filter((p) => p.Tags.includes(t)).length}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </aside>
+                    )}
                 </div>
               )}
             </>
@@ -1131,7 +1284,7 @@ function SearchDialog({
         .filter(
           (p) =>
             (!space || p.SpaceId === +space) &&
-            (!status || p.Status === status) &&
+            (status ? p.Status === status : p.Status !== "Archived") &&
             (!tag || p.Tags.includes(tag)) &&
             (!after || p.Modified.slice(0, 10) >= after) &&
             `${p.Title} ${p.Summary} ${searchBodies.get(p.Id)} ${p.Tags.join(" ")} ${p.AuthorName} ${p.LastEditorName}`
@@ -1201,7 +1354,7 @@ function SearchDialog({
           <label>
             Status
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">All statuses</option>
+              <option value="">Active pages</option>
               {["Published", "Draft", "Archived"].map((s) => (
                 <option key={s}>{s}</option>
               ))}

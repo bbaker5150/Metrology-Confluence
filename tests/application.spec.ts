@@ -71,8 +71,11 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
     .getByRole("button", { name: "Version history", exact: true })
     .click();
   await page.getByRole("button", { name: /Version 1/ }).click();
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await page
+    .getByLabel("Confirm version restore", { exact: true })
+    .getByRole("button", { name: "Restore version", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Acceptance criteria", exact: true }),
   ).toBeVisible();

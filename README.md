@@ -4,27 +4,51 @@ A lightweight internal knowledge hub for the metrology software suite. React 18,
 
 [Download the latest HTML](https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/index.html) · [Builds](https://github.com/bbaker5150/Metrology-Confluence/actions/workflows/build-sharepoint-html.yml) · [Reference-app discovery](docs/discovery.md) · [Confluence design review](docs/confluence-design-review.md)
 
-Preview the [home](docs/previews/home-light.webp), [visual editor](docs/previews/editor.webp), [dark editor](docs/previews/editor-dark.webp), [page preview](docs/previews/page-preview.webp), and [symbol picker](docs/previews/symbols.webp). These captures use demonstration content.
+Preview the [home](docs/previews/home-light.webp), [visual editor](docs/previews/editor.webp), [page actions](docs/previews/page-actions.webp), [revision comparison](docs/previews/revision-comparison.webp), and [personal saved pages](docs/previews/saved-pages.webp). These captures use demonstration content.
 
 ## Features
 
-- Spaces, nested pages, pinned articles, recent updates, personal drafts, and topic browsing.
+- Spaces, nested pages, shared pinned articles, recent updates, personal drafts, saved-for-later shortcuts, and topic browsing.
+- Duplicate a page with independent attachment copies, move its location, or archive and restore it. Library views include title/tag/author filtering and sorting.
 - Global command search (`Ctrl+K` / `Cmd+K`) with space, status, tag, and date filters.
 - Visual Tiptap editor with headings, bold/italic/underline, lists and action lists, links, undo/redo, and five starter templates.
 - An Insert menu and `/` on an empty line for tables, code blocks, callouts, expandable sections, inline status badges, dividers, symbols, emoji, and images. Secondary formatting includes strikethrough, highlighting, inline code, subscript, superscript, and text alignment.
 - Page links selected by title or space, an authoring outline, reader-style preview, and find/replace with case and whole-word controls.
 - Automatic recovery copies in this browser, including staged images, with explicit restore/discard choices. Saving to SharePoint remains manual.
 - Images from upload, paste, drag and drop, a URL, or existing page attachments, with description and width controls. Code blocks have a language selector; the reader adds syntax highlighting and copy controls.
-- Article breadcrumbs, metadata, heading navigation, code copy, attachments, comments, Markdown export, and print/PDF layout.
-- Revision snapshots with preview and restore; a restored revision becomes a new saved version. Creators can delete leaf pages through the app after confirmation.
+- Article breadcrumbs, metadata, heading navigation, connected pages, code copy, attachments, comments, Markdown export, and print/PDF layout.
+- Revision snapshots with preview, text comparison, and restore; a restored revision becomes a new saved version. Creators can delete leaf pages through the app after confirmation.
 - Light/dark suite themes, the shared MetSoft logo, a consolidated Create menu, a quieter article action bar, responsive navigation, and Workspace settings.
 - Seeded browser-local demo storage for development; SharePoint REST v1 and Lists for deployment.
 
 ## Working in the hub
 
-Use **Create → Space** to add a team or topic, then **Create → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recent, Pinned, and My drafts provide quick ways back to useful content. Search is available in the top bar or with `Ctrl+K` / `Cmd+K`.
+Use **Create → Space** to add a team or topic, then **Create → Page** to write its first article. The sidebar holds your spaces and nested pages; Home, Recently updated, Pinned pages, My drafts, Saved for later, and Archived pages provide quick ways back to useful content. Library views can be filtered by title, tag, or author and sorted by recent update, title, or oldest update. Global search is available in the top bar or with `Ctrl+K` / `Cmd+K`; its default **Active pages** filter excludes archived content. Choose **Archived** explicitly to search the archive.
 
-Pages open in a reading view with a clear **Edit page** action. **More page actions** contains version history, copying a page link, Markdown download, print/PDF, and **Delete page** for the original creator. Pinning remains a separate toggle. Site connection, list provisioning, and team access checks live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
+Pages open in a reading view with a clear **Edit page** action. **More page actions** groups version history, duplication, moving, archive/restore, personal shortcuts, copying a page link, exports, and **Delete page** for the original creator. Pinning remains a separate toggle shared by the team. Site connection, list provisioning, and team access checks live in **Workspace settings**, visible only after SharePoint confirms site-owner access.
+
+### Organize and reuse pages
+
+- **Duplicate page:** choose a title, destination space, and parent, then select **Create draft copy**. The new unpinned Draft opens in the inline editor. It has its own creator and independent copies of the source page's attachments; references to those attachments are rewritten. Child pages, comments, earlier versions, and personal shortcuts stay with the original. Links to external files or other pages' attachments remain references. The new item inherits the app list's normal access; source-specific SharePoint item permissions are not copied.
+- **Move page:** choose a destination space and parent. The page keeps its ID, links, attachments, and history. Moving a parent within its space keeps its children beneath it. A page with children, including archived children, cannot move between spaces; move those children elsewhere first. The app blocks hierarchy cycles and archived parents.
+- **Archive page:** remove an outdated page from the active tree and normal discovery without deleting its content or attachments. Move or archive active descendants first; this action never archives a branch automatically. Archiving removes the shared pin. Use **Archived pages** or an existing direct link to return to it. The app disables editing, new comments, uploads, pinning, and revision restore while archived; viewing, exporting, moving, and duplicating remain available.
+- **Restore archived page:** select **Draft** or **Published**, then **Restore page**. Draft is the default. If the page's parent is archived or unavailable, move the page under an active parent or to the space root first. SharePoint's existing edit permissions govern move/archive/restore; the creator-only rule applies to deletion inside this app.
+
+Duplication follows the existing attachment limits: **2 MB per file in local mode**, **10 MB per file in SharePoint mode**, and **50 MB total per copy**. Files are checked before creating the draft. Creating the draft, copying attachments, and saving its content are separate operations. An uncertain response can leave a partial copy; automatic retries are blocked, and **Open partial draft** is offered when the new item ID is known. Inspect that draft and its attachments before starting another copy. The app does not silently delete a partial draft.
+
+**Connected pages** shows **Child pages**, **Links to this page**, and **Links from this page**. These connections come from accessible active pages and actual internal links, including links in older Markdown articles. They do not change sharing or grant access.
+
+### Personal reading shortcuts
+
+Choose **More page actions → Save for later** to add a page to **Saved for later**. These shortcuts belong to your account and connected site in this browser; they do not synchronize between browser profiles or devices. Archived saved pages remain listed with their status. Removing a shortcut does not change the page or the team's Pinned pages. Only page IDs are stored locally, and other tabs on the same origin refresh when the list changes. Clearing browser storage removes the shortcuts; storage or identity errors are reported instead of claiming that a save succeeded. Invalid stored lists are left untouched and reported rather than silently overwritten.
+
+### Review changes before restoring
+
+Open **More page actions → Version history**, select a revision, and use **Preview** or **Compare changes**. **Compare with** lets you choose the current page or another saved revision. The comparison marks added and removed lines and title changes using text and color. It compares the Markdown representation of article content; comments, attachments, permissions, and other page settings are not part of the diff. Large comparisons fall back to complete individual previews.
+
+To restore, select **Restore**, review the confirmation, and select **Restore version**. This restores the selected title and content as a new revision while retaining the current location, status, tags, and attachments. It uses the page's original revision check, so another author's newer save is not silently overwritten. A failed or uncertain restore requires reloading the latest page before another attempt. Confirmation stays inside the app and works in SharePoint hosts that suppress native browser dialogs.
+
+### Write and edit
 
 The visual editor occupies the main document area, keeping the workspace sidebar available. Select text to apply formatting, use **Insert** to add a block, or type `/` at the start of an empty paragraph. The symbol picker includes metrology characters such as `±`, `µ`, `Ω`, `°`, `σ`, `≤`, and `≥`, as well as common emoji. Select a table, code block, or image to reveal its relevant controls. **Page details** holds the summary, tags, parent page, and optional change note; new pages also offer five starter templates.
 
@@ -96,23 +120,23 @@ The adapter checks local and same-origin parent `_spPageContextInfo`. An explici
 
 The current sibling convention is product-prefixed display names, such as `Uncertalytics - Sessions` and `Modernization-Tracker - Projects`. This app follows that convention:
 
-| Canonical list title | Recognized existing alias | Purpose |
-| --- | --- | --- |
-| `Metrology-Confluence - Spaces` | `KB_Spaces` | Workspaces and departments |
-| `Metrology-Confluence - Pages` | `KB_Pages` | Hierarchical articles, including existing Markdown and visual-editor content |
-| `Metrology-Confluence - Versions` | `KB_Versions` | Article revision snapshots |
-| `Metrology-Confluence - Comments` | `KB_Comments` | Page discussion |
+| Canonical list title              | Recognized existing alias | Purpose                                                                      |
+| --------------------------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `Metrology-Confluence - Spaces`   | `KB_Spaces`               | Workspaces and departments                                                   |
+| `Metrology-Confluence - Pages`    | `KB_Pages`                | Hierarchical articles, including existing Markdown and visual-editor content |
+| `Metrology-Confluence - Versions` | `KB_Versions`             | Article revision snapshots                                                   |
+| `Metrology-Confluence - Comments` | `KB_Comments`             | Page discussion                                                              |
 
 Provisioning creates canonical names. Existing `KB_*` lists are reused; they are not renamed or replaced. If both names exist for one list, setup fails with an ambiguity error so an administrator can resolve it without guessing which data is authoritative.
 
 `Id`, `Title`, `Created`, and `Modified` are built-in SharePoint fields. Custom fields retain the internal names from the requested schema:
 
-| List | Custom columns |
-| --- | --- |
-| Spaces | `Slug` (Text, indexed), `Description` (Note), `IconName` (Text), `AccentColor` (Text), `SortOrder` (Number), `IsArchived` (Boolean) |
-| Pages | `SpaceId` / `ParentPageId` (Number, indexed), `Content` / `Summary` (Note), `Tags` (Text, JSON array), `Status` (Choice: Draft, Published, Archived; indexed), `IsPinned` (Boolean), `TemplateType` (Text), `VersionCount` (Number), `AuthorName` / `LastEditorName` (Text) |
-| Versions | `PageId` (Number, indexed), `VersionNumber` (Number), `TitleSnapshot` (Text), `ContentSnapshot` (Note), `ChangeNote` / `EditedBy` (Text) |
-| Comments | `PageId` (Number, indexed), `CommentBody` (Note), `AuthorName` (Text) |
+| List     | Custom columns                                                                                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spaces   | `Slug` (Text, indexed), `Description` (Note), `IconName` (Text), `AccentColor` (Text), `SortOrder` (Number), `IsArchived` (Boolean)                                                                                                                                         |
+| Pages    | `SpaceId` / `ParentPageId` (Number, indexed), `Content` / `Summary` (Note), `Tags` (Text, JSON array), `Status` (Choice: Draft, Published, Archived; indexed), `IsPinned` (Boolean), `TemplateType` (Text), `VersionCount` (Number), `AuthorName` / `LastEditorName` (Text) |
+| Versions | `PageId` (Number, indexed), `VersionNumber` (Number), `TitleSnapshot` (Text), `ContentSnapshot` (Note), `ChangeNote` / `EditedBy` (Text)                                                                                                                                    |
+| Comments | `PageId` (Number, indexed), `CommentBody` (Note), `AuthorName` (Text)                                                                                                                                                                                                       |
 
 Note columns continue to store plain text. Existing Markdown content remains readable without migration. Visual-editor saves store sanitized HTML inside a versioned text envelope beginning with `<!-- metrology-rich-text:v1 -->`; the same format is used in revision snapshots. This editor upgrade does not change list names or require new columns. Text columns have SharePoint's 255-character limit, including the serialized tag array. Number relationships keep the REST payload compact; they are application-level references, not SharePoint Lookup columns. The Pages list enables attachments and native SharePoint versioning in addition to the application's Versions list. The schema source is [`src/services/schema.ts`](src/services/schema.ts).
 
@@ -179,9 +203,9 @@ src/
   components/           Reader, visual editor, content renderer, dialogs
   data/                 Local demonstration content
   editor/               Expand/status nodes and document find/replace
-  hooks/                Browser-local draft recovery lifecycle
-  lib/                  Sanitized rich content and Markdown conversion
-  services/             SharePoint/local adapters, recovery, image saves, schema
+  hooks/                Browser-local draft recovery and personal shortcuts
+  lib/                  Rich content, Markdown, revision comparison, page links
+  services/             SharePoint/local adapters, page operations, recovery, schema
   types.ts              Shared data contracts
 scripts/
   provision-sharepoint.ps1
@@ -205,20 +229,20 @@ https://github.com/bbaker5150/Metrology-Confluence/releases/latest/download/inde
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| HTML downloads or shows as text | Approved SharePoint host, library handling, and tenant custom-script policy |
-| Create-space dialog opens but its button does nothing | Replace older HTML with the current release; earlier builds relied on native form submission, which sandboxed embeds can block. The current build does not require the iframe's `allow-forms` permission. |
-| Local mode appears on SharePoint | Page context is absent; use the explicit same-origin `siteUrl` and reload |
-| 401/403 or digest failure | Current session, same-origin host, site URL, and permissions; sign in again if needed |
-| Lists or columns missing | A site owner with Manage Lists can run Workspace settings |
-| Workspace settings is not shown | It is owner-only; local/demo mode, non-owner access, or an unsuccessful owner check keeps it hidden |
+| Symptom                                                                           | Check                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTML downloads or shows as text                                                   | Approved SharePoint host, library handling, and tenant custom-script policy                                                                                                                                                             |
+| Create-space dialog opens but its button does nothing                             | Replace older HTML with the current release; earlier builds relied on native form submission, which sandboxed embeds can block. The current build does not require the iframe's `allow-forms` permission.                               |
+| Local mode appears on SharePoint                                                  | Page context is absent; use the explicit same-origin `siteUrl` and reload                                                                                                                                                               |
+| 401/403 or digest failure                                                         | Current session, same-origin host, site URL, and permissions; sign in again if needed                                                                                                                                                   |
+| Lists or columns missing                                                          | A site owner with Manage Lists can run Workspace settings                                                                                                                                                                               |
+| Workspace settings is not shown                                                   | It is owner-only; local/demo mode, non-owner access, or an unsuccessful owner check keeps it hidden                                                                                                                                     |
 | A Metrology App User member can use Tracker but cannot read, create, or edit here | An owner must upload the current HTML, then run Workspace settings → Team access → Check team access → Repair team access → review Apply shared access. Tracker's scoped grants do not configure these app lists; refresh after repair. |
-| Team access is ready but the app page cannot be opened | The repair does not grant access to the host page, HTML file, library, or site; check those permissions separately |
-| Delete page is missing or blocked | Only the native original creator can delete through the app. All child pages must be moved or deleted first; SharePoint must also permit deletion. |
-| Duplicate-list alias error | Resolve canonical/legacy duplicates; the app deliberately does not select one |
-| Save conflict | Another edit changed the item; reload the latest article before editing again |
-| Image save partly completed | Keep the editor open and follow its recovery message; reopen the latest page before retrying an uncertain save |
-| Device recovery unavailable | Browser storage is blocked, unavailable, or full; save normally or use Page tools → Download recovery copy before closing the tab |
-| Browser demo storage is full | Remove unnecessary local files or clear demo storage; production uses SharePoint |
-| Release missing | Check the exact commit's workflow and repository release-write policy |
+| Team access is ready but the app page cannot be opened                            | The repair does not grant access to the host page, HTML file, library, or site; check those permissions separately                                                                                                                      |
+| Delete page is missing or blocked                                                 | Only the native original creator can delete through the app. All child pages must be moved or deleted first; SharePoint must also permit deletion.                                                                                      |
+| Duplicate-list alias error                                                        | Resolve canonical/legacy duplicates; the app deliberately does not select one                                                                                                                                                           |
+| Save conflict                                                                     | Another edit changed the item; reload the latest article before editing again                                                                                                                                                           |
+| Image save partly completed                                                       | Keep the editor open and follow its recovery message; reopen the latest page before retrying an uncertain save                                                                                                                          |
+| Device recovery unavailable                                                       | Browser storage is blocked, unavailable, or full; save normally or use Page tools → Download recovery copy before closing the tab                                                                                                       |
+| Browser demo storage is full                                                      | Remove unnecessary local files or clear demo storage; production uses SharePoint                                                                                                                                                        |
+| Release missing                                                                   | Check the exact commit's workflow and repository release-write policy                                                                                                                                                                   |

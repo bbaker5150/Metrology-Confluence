@@ -422,4 +422,98 @@ describe("context and local persistence", () => {
     const moved = await service.savePage({ ...child, ParentPageId: null });
     expect(moved.ParentPageId).toBeNull();
   });
+
+  it("rechecks a new child's parent when another editor archives it before saving", async () => {
+    const firstTab = new KnowledgeService({ mode: "local", webUrl: "" });
+    const parent = await firstTab.savePage({
+      Title: "Parent",
+      SpaceId: 1,
+      Content: "",
+    });
+    const unfinishedChild = {
+      Title: "Unfinished child",
+      SpaceId: 1,
+      ParentPageId: parent.Id,
+      Content: "Work in progress",
+    };
+    const secondTab = new KnowledgeService({ mode: "local", webUrl: "" });
+    await secondTab.savePage({ ...parent, Status: "Archived" });
+    const before = await firstTab.getPages();
+    await expect(firstTab.savePage(unfinishedChild)).rejects.toThrow(
+      /ancestor is now archived/,
+    );
+    expect(await firstTab.getPages()).toEqual(before);
+  });
+
+  it("blocks active edits below archived grandparents but allows archiving a legacy descendant", async () => {
+    const firstTab = new KnowledgeService({ mode: "local", webUrl: "" });
+    const ancestor = await firstTab.savePage({
+      Title: "Ancestor",
+      SpaceId: 1,
+      Content: "",
+    });
+    const parent = await firstTab.savePage({
+      Title: "Parent",
+      SpaceId: 1,
+      ParentPageId: ancestor.Id,
+      Content: "",
+    });
+    const child = await firstTab.savePage({
+      Title: "Child",
+      SpaceId: 1,
+      ParentPageId: parent.Id,
+      Content: "Existing content",
+      Status: "Published",
+    });
+    const secondTab = new KnowledgeService({ mode: "local", webUrl: "" });
+    // Native list changes or legacy data can contain an active descendant below
+    // an archived ancestor; the app must permit archiving it to repair the tree.
+    await secondTab.savePage({ ...ancestor, Status: "Archived" });
+    await expect(
+      firstTab.savePage({ ...child, Content: "Unpublished edit" }),
+    ).rejects.toThrow(/ancestor is now archived/);
+    const archived = await firstTab.savePage({ ...child, Status: "Archived" });
+    expect(archived.Status).toBe("Archived");
+    expect(archived.Content).toBe(child.Content);
+    expect(archived.VersionCount).toBe(child.VersionCount + 1);
+  });
+
+  it("rejects new active content beneath an incomplete ancestor chain", async () => {
+    const service = new KnowledgeService({ mode: "local", webUrl: "" });
+    const ancestor = await service.savePage({
+      Title: "Ancestor",
+      SpaceId: 1,
+      Content: "",
+    });
+    const parent = await service.savePage({
+      Title: "Parent",
+      SpaceId: 1,
+      ParentPageId: ancestor.Id,
+      Content: "",
+    });
+    const stored = JSON.parse(memory.get("metrology-confluence:demo:v1")!);
+    stored.pages = stored.pages.filter(
+      (item: { Id: number }) => item.Id !== ancestor.Id,
+    );
+    memory.set("metrology-confluence:demo:v1", JSON.stringify(stored));
+    await expect(
+      service.savePage({
+        Title: "New child",
+        SpaceId: 1,
+        ParentPageId: parent.Id,
+        Content: "",
+      }),
+    ).rejects.toThrow(/hierarchy is incomplete/);
+    const moved = await service.savePage({ ...parent, ParentPageId: null });
+    expect(
+      (
+        await service.savePage({
+          Title: "New child",
+          SpaceId: 1,
+          ParentPageId: moved.Id,
+          Content: "",
+        })
+      ).ParentPageId,
+    ).toBe(moved.Id);
+  });
 });

@@ -399,7 +399,10 @@ export class KnowledgeService {
   private client?: SharePointClient;
   private userPromise?: Promise<string>;
   public readonly initializationError?: Error;
-  constructor(context?: ServiceContext, fetcher: typeof fetch = fetch) {
+  constructor(
+    context?: ServiceContext,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {
     let resolved: ServiceContext;
     try {
       resolved = context ?? detectContext(window);
@@ -611,6 +614,72 @@ export class KnowledgeService {
       ServerRelativeUrl: this.safeAttachmentUrl(file.ServerRelativeUrl),
     }));
   }
+  /** Read only an attachment confirmed on this page, without following redirects. */
+  async readAttachment(pageId: number, fileName: string): Promise<File> {
+    this.assertInitialized();
+    const attachment = (await this.getAttachments(pageId)).find(
+      (file) => file.FileName === fileName,
+    );
+    if (!attachment) throw new Error("The source attachment no longer exists.");
+    const limit = (this.client ? 10 : 2) * 1024 * 1024;
+    if (attachment.Size && attachment.Size > limit)
+      throw new Error(`The attachment ${fileName} is too large to copy.`);
+    const url = this.safeAttachmentUrl(attachment.ServerRelativeUrl);
+    const response = await this.fetcher.call(globalThis, url, {
+      credentials: "include",
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok)
+      throw new Error(
+        `Could not read ${fileName} (${response.status}). Check your attachment permissions and sign-in session.`,
+      );
+    const declaredSize = Number(response.headers.get("content-length"));
+    if (declaredSize > limit) {
+      await response.body?.cancel();
+      throw new Error(`The attachment ${fileName} is too large to copy.`);
+    }
+    const mime = (
+      response.headers.get("content-type") ||
+      attachment.MimeType ||
+      "application/octet-stream"
+    )
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    if (mime === "text/html" || mime === "application/xhtml+xml") {
+      await response.body?.cancel();
+      throw new Error(
+        `The attachment ${fileName} returned an HTML page. Check your sign-in session.`,
+      );
+    }
+    const chunks: ArrayBuffer[] = [];
+    let size = 0;
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > limit) {
+            await reader.cancel();
+            throw new Error(`The attachment ${fileName} is too large to copy.`);
+          }
+          chunks.push(value.slice().buffer);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > limit)
+        throw new Error(`The attachment ${fileName} is too large to copy.`);
+      chunks.push(bytes);
+    }
+    return new File(chunks, fileName, { type: mime });
+  }
   private safeAttachmentUrl(url: string) {
     if (
       !this.client &&
@@ -649,6 +718,7 @@ export class KnowledgeService {
       input.ParentPageId !== undefined
         ? input.ParentPageId
         : (existing?.ParentPageId ?? null);
+    const resultingStatus = input.Status ?? existing?.Status ?? "Draft";
     if (parentId) {
       let parent = all.find((p) => p.Id === parentId);
       const visited = new Set<number>(input.Id ? [input.Id] : []);
@@ -657,9 +727,17 @@ export class KnowledgeService {
           throw new Error(
             "Parent pages must belong to the same space and cannot create a cycle.",
           );
+        if (resultingStatus !== "Archived" && parent.Status === "Archived")
+          throw new Error(
+            "A parent or ancestor is now archived. Move this page to an active parent or restore the archived ancestor before saving.",
+          );
         visited.add(parent.Id);
         const next = parent.ParentPageId;
         parent = next ? all.find((p) => p.Id === next) : undefined;
+        if (next && !parent && resultingStatus !== "Archived")
+          throw new Error(
+            "The parent hierarchy is incomplete. Move the parent to an available location before saving beneath it.",
+          );
       }
       if (!all.some((p) => p.Id === parentId))
         throw new Error("The selected parent page does not exist.");
@@ -674,7 +752,7 @@ export class KnowledgeService {
       Content: input.Content,
       Summary: input.Summary ?? existing?.Summary ?? "",
       Tags: input.Tags ?? existing?.Tags ?? [],
-      Status: input.Status ?? existing?.Status ?? "Draft",
+      Status: resultingStatus,
       IsPinned: input.IsPinned ?? existing?.IsPinned ?? false,
       TemplateType: input.TemplateType ?? existing?.TemplateType ?? "blank",
       VersionCount: (existing?.VersionCount ?? 0) + 1,
