@@ -87,3 +87,13 @@ Reviewed the following current Confluence Cloud articles on 2026-11-02. Their ar
 - **Comparing revisions:** changes are shown as bounded line comparisons of the Markdown representation, with additions and removals labeled in text as well as color. This is a content comparison, not a pixel-perfect visual diff or a comparison of comments, attachments, permissions, or every metadata field. Large comparisons fall back to a clear explanation and individual previews instead of blocking the browser.
 - **Connected pages and personal shortcuts:** connections use real internal link destinations, not words that merely resemble a page reference. Only the pages already accessible to the current user are considered. Personal shortcuts store page IDs in browser storage; storage failures are reported and do not imply a successful save.
 - **Deployment:** existing Pages, Versions, Comments, and Spaces lists remain sufficient. No additional columns, permissions model, background service, notifications, or tenant automation are introduced.
+
+## Tasking.docx interface cleanup
+
+The user's task sheet calls for a quieter reading view and consistent controls. Edit page is now the first item in More page actions, with its existing archived-page restriction preserved. Reading hides the app top bar while keeping the sidebar; on smaller screens, a navigation button beside the breadcrumbs opens that same sidebar.
+
+Create, Search, and Theme use matching icon buttons in that order, with accessible names and tooltips. The editor no longer repeats Editing page / Editing published page: one Published or Draft badge remains. The child-page restriction stays enforced, with its explanation available through the space selector's tooltip and accessible description.
+
+The metadata layout no longer overrides avatar centering, and native select options explicitly use the theme's foreground and surface colors. Existing browser checks cover the edit menu path, icon order and sizing, dark option colors, and mobile navigation after the header is removed.
+
+Updated captures show the [page action menu](previews/page-actions.webp), [dark dropdown](previews/dark-dropdown.webp), and [mobile reading view](previews/mobile-reader.webp).

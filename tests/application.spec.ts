@@ -35,6 +35,13 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.locator(".workspace-topbar")).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "Main navigation" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit page", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Acceptance criteria", exact: true }),
   ).toBeVisible();
@@ -51,6 +58,13 @@ test("portable artifact supports knowledge creation, search, revisions, and relo
     buffer: Buffer.from("Measurement reference"),
   });
   await expect(page.getByRole("link", { name: "reference.txt" })).toBeVisible();
+  await page.getByLabel("More page actions", { exact: true }).click();
+  await expect(
+    page
+      .getByRole("group", { name: "Page actions", exact: true })
+      .getByRole("button")
+      .first(),
+  ).toHaveText("Edit page");
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Article content" })
@@ -113,8 +127,38 @@ test("mobile navigation, themes, and safe Markdown", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const workspaceActions = page
+    .getByRole("group", { name: "Workspace actions", exact: true })
+    .getByRole("button");
+  expect(
+    await workspaceActions.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    ),
+  ).toEqual(["Create", "Search knowledge", "Switch to light theme"]);
+  const actionSizes = await workspaceActions.evaluateAll((buttons) =>
+    buttons.map((button) => ({
+      width: button.getBoundingClientRect().width,
+      height: button.getBoundingClientRect().height,
+    })),
+  );
+  expect(actionSizes).toEqual(Array(3).fill({ width: 34, height: 34 }));
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("menuitem", { name: /^Page/ }).click();
+  const editor = page.getByRole("region", { name: "Create page", exact: true });
+  await expect(editor.getByText("New page", { exact: true })).toHaveCount(0);
+  const optionColors = await page
+    .getByLabel("Text style")
+    .locator("option")
+    .first()
+    .evaluate((option) => {
+      const style = getComputedStyle(option);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+      };
+    });
+  expect(optionColors.background).toBe("rgb(13, 26, 40)");
+  expect(optionColors.color).toBe("rgb(231, 238, 247)");
   await page.getByLabel("Title", { exact: true }).fill("Safe Markdown");
   await page
     .getByRole("button", { name: "More formatting", exact: true })
@@ -145,4 +189,16 @@ test("mobile navigation, themes, and safe Markdown", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await expect(page.locator(".workspace-topbar")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Knowledge home", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Search knowledge", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Search knowledge", exact: true }),
+  ).toBeVisible();
 });

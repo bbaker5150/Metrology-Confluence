@@ -326,6 +326,7 @@ export default function App() {
     );
   const page = pages.find((p) => p.Id === pageId),
     space = spaces.find((s) => s.Id === (page?.SpaceId || spaceId));
+  const readingPage = Boolean(page && !editor && !loading && !error);
   const live = pages.filter((p) => p.Status !== "Archived"),
     pinned = live.filter((p) => p.IsPinned);
   const tags = Array.from(new Set(live.flatMap((p) => p.Tags))).sort();
@@ -573,124 +574,129 @@ export default function App() {
         </div>
       </aside>
       <div className="workspace-main">
-        <header className="workspace-topbar">
-          <button
-            type="button"
-            className="icon-button mobile-menu"
-            aria-label="Open navigation"
-            onClick={() => setMobile(true)}
-          >
-            <Menu size={21} />
-          </button>
-          <div className="workspace-location">
-            <BookOpen size={17} />
-            <span>Knowledge hub</span>
-          </div>
-          <div className="workspace-toolbar">
+        {!readingPage && (
+          <header className="workspace-topbar">
             <button
               type="button"
-              className="global-search"
-              onClick={() => setSearch(true)}
-              aria-label="Search knowledge"
+              className="icon-button mobile-menu"
+              aria-label="Open navigation"
+              onClick={() => setMobile(true)}
             >
-              <Search size={17} />
-              <span>Search anything</span>
-              <kbd>
-                {/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"}
-              </kbd>
+              <Menu size={21} />
             </button>
-            <button
-              type="button"
-              className="icon-button theme-button"
-              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            >
-              {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
-            </button>
+            <div className="workspace-location">
+              <BookOpen size={17} />
+              <span>Knowledge hub</span>
+            </div>
             <div
-              className="create-control"
-              ref={createRef}
-              onKeyDown={(e) => {
-                const actions = Array.from(
-                  createRef.current?.querySelectorAll<HTMLButtonElement>(
-                    '[role="menuitem"]:not(:disabled)',
-                  ) || [],
-                );
-                if (e.key === "Escape") {
-                  setCreateOpen(false);
-                  createRef.current
-                    ?.querySelector<HTMLButtonElement>(".create-trigger")
-                    ?.focus();
-                }
-                if (
-                  (e.key === "ArrowDown" || e.key === "ArrowUp") &&
-                  createOpen
-                ) {
-                  e.preventDefault();
-                  const at = actions.indexOf(
-                    document.activeElement as HTMLButtonElement,
-                  );
-                  actions[
-                    (at +
-                      (e.key === "ArrowDown" ? 1 : actions.length - 1) +
-                      actions.length) %
-                      actions.length
-                  ]?.focus();
-                }
-              }}
+              className="workspace-toolbar"
+              role="group"
+              aria-label="Workspace actions"
             >
+              <div
+                className="create-control"
+                ref={createRef}
+                onKeyDown={(e) => {
+                  const actions = Array.from(
+                    createRef.current?.querySelectorAll<HTMLButtonElement>(
+                      '[role="menuitem"]:not(:disabled)',
+                    ) || [],
+                  );
+                  if (e.key === "Escape") {
+                    setCreateOpen(false);
+                    createRef.current
+                      ?.querySelector<HTMLButtonElement>(".create-trigger")
+                      ?.focus();
+                  }
+                  if (
+                    (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+                    createOpen
+                  ) {
+                    e.preventDefault();
+                    const at = actions.indexOf(
+                      document.activeElement as HTMLButtonElement,
+                    );
+                    actions[
+                      (at +
+                        (e.key === "ArrowDown" ? 1 : actions.length - 1) +
+                        actions.length) %
+                        actions.length
+                    ]?.focus();
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  className="icon-button create-trigger"
+                  aria-label="Create"
+                  title="Create"
+                  aria-haspopup="menu"
+                  aria-expanded={createOpen}
+                  onClick={() => setCreateOpen((v) => !v)}
+                  disabled={loading}
+                >
+                  <Plus size={18} />
+                </button>
+                {createOpen && (
+                  <div
+                    className="create-dropdown"
+                    role="menu"
+                    aria-label="Create content"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!spaces.length}
+                      onClick={() => create()}
+                    >
+                      <FileText size={19} />
+                      <span>
+                        <strong>Page</strong>
+                        <small>
+                          {spaces.length
+                            ? "Capture and share knowledge"
+                            : "Create a space first"}
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        transition(() => setNewSpace(true));
+                      }}
+                    >
+                      <FolderOpen size={19} />
+                      <span>
+                        <strong>Space</strong>
+                        <small>A home for a team or topic</small>
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                className="button primary create-trigger"
-                aria-haspopup="menu"
-                aria-expanded={createOpen}
-                onClick={() => setCreateOpen((v) => !v)}
-                disabled={loading}
+                className="icon-button"
+                onClick={() => setSearch(true)}
+                aria-label="Search knowledge"
+                aria-keyshortcuts="Control+k Meta+k"
+                title={`Search knowledge (${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"})`}
               >
-                <Plus size={17} />
-                Create
-                <ChevronDown size={13} />
+                <Search size={18} />
               </button>
-              {createOpen && (
-                <div
-                  className="create-dropdown"
-                  role="menu"
-                  aria-label="Create content"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={!spaces.length}
-                    onClick={() => create()}
-                  >
-                    <FileText size={19} />
-                    <span>
-                      <strong>Page</strong>
-                      <small>
-                        {spaces.length
-                          ? "Capture and share knowledge"
-                          : "Create a space first"}
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      transition(() => setNewSpace(true));
-                    }}
-                  >
-                    <FolderOpen size={19} />
-                    <span>
-                      <strong>Space</strong>
-                      <small>A home for a team or topic</small>
-                    </span>
-                  </button>
-                </div>
-              )}
+              <button
+                type="button"
+                className="icon-button theme-button"
+                aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+                title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              >
+                {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+              </button>
             </div>
-          </div>
-        </header>
+          </header>
+        )}
         <main
           id="main-content"
           className={`workspace-content ${editor ? "workspace-editing" : ""}`}
@@ -772,6 +778,7 @@ export default function App() {
               onNavigate={navigate}
               onSpace={(id) => go("space", id)}
               onEdit={() => startEditor(page)}
+              onOpenNavigation={() => setMobile(true)}
               onBusyChange={reportReaderBusy}
               onDuplicateCreated={(copy) => {
                 changed(copy);

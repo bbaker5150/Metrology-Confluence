@@ -1028,12 +1028,6 @@ export default function Editor({
         }}
       >
         <header className="rich-page-actions">
-          <div className="rich-edit-context">
-            <FileEdit size={16} />
-            <span>
-              {preview ? "Preview" : basePage.Id ? "Editing page" : "New page"}
-            </span>
-          </div>
           <div className="rich-page-actions-right">
             {preview ? (
               <button
@@ -1237,13 +1231,22 @@ export default function Editor({
         <div className="rich-document-top" hidden={preview}>
           <div className="rich-location">
             <span className="rich-draft-label">
-              {page.Status === "Published" ? "Editing published page" : "Draft"}
+              {page.Status === "Published" ? "Published" : "Draft"}
             </span>
             <span className="rich-location-divider">/</span>
-            <label>
+            <label
+              title={
+                hasChildren
+                  ? "Move child pages first to change this page’s space."
+                  : undefined
+              }
+            >
               <span className="visually-hidden">Space</span>
               <select
                 aria-label="Space"
+                aria-describedby={
+                  hasChildren ? "page-space-constraint" : undefined
+                }
                 disabled={busy || hasChildren}
                 value={spaceId}
                 onChange={(event) => {
@@ -1261,7 +1264,9 @@ export default function Editor({
               </select>
             </label>
             {hasChildren && (
-              <span className="rich-location-note">Contains child pages</span>
+              <span id="page-space-constraint" className="visually-hidden">
+                Move child pages first to change this page’s space.
+              </span>
             )}
           </div>
           <div className="rich-document-tools">

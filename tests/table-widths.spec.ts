@@ -44,6 +44,7 @@ test("dragged table column widths survive publishing, reload, and reopening the 
   await expect(
     page.locator(".article-content table col").first(),
   ).toHaveAttribute("style", `width: ${width}px;`);
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await expect(
     page

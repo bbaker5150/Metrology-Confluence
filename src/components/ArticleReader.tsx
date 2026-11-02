@@ -20,6 +20,7 @@ import {
   Send,
   Upload,
   MoreHorizontal,
+  Menu,
   ChevronDown,
   Link as LinkIcon,
   Trash2,
@@ -42,6 +43,7 @@ type Props = {
   onNavigate: (id: number) => void;
   onSpace?: (id: number) => void;
   onEdit: () => void;
+  onOpenNavigation: () => void;
   onChanged: (page: Page) => void;
   onDeleted: (page: Page) => void;
   onToast: (message: string) => void;
@@ -95,6 +97,7 @@ export default function ArticleReader({
   onNavigate,
   onSpace,
   onEdit,
+  onOpenNavigation,
   onChanged,
   onDeleted,
   onToast,
@@ -342,6 +345,15 @@ export default function ArticleReader({
   return (
     <article className="article-view">
       <nav className="breadcrumbs" aria-label="Breadcrumb">
+        <button
+          type="button"
+          className="icon-button mobile-menu reader-navigation"
+          aria-label="Open navigation"
+          title="Open navigation"
+          onClick={onOpenNavigation}
+        >
+          <Menu size={21} />
+        </button>
         {space && onSpace ? (
           <button type="button" onClick={() => onSpace(space.Id)}>
             {space.Title}
@@ -425,6 +437,15 @@ export default function ArticleReader({
                   details?.querySelector("summary")?.focus();
                 }}
               >
+                <button
+                  type="button"
+                  disabled={working || archived}
+                  onClick={onEdit}
+                >
+                  <Edit3 size={16} />
+                  Edit page
+                </button>
+                <div className="reader-menu-divider" />
                 <button
                   type="button"
                   disabled={working || !savedAvailable}
@@ -513,15 +534,6 @@ export default function ArticleReader({
                 )}
               </div>
             </details>
-            <button
-              type="button"
-              className="button primary"
-              disabled={working || archived}
-              onClick={onEdit}
-            >
-              <Edit3 size={15} />
-              Edit page
-            </button>
           </div>
         </div>
         <h1>{page.Title}</h1>

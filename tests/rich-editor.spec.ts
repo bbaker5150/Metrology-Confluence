@@ -126,6 +126,7 @@ test("an image staged in a new visual page is attached, rendered, and editable a
         (img as HTMLImageElement).naturalWidth > 0,
     ),
   ).toBe(true);
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await expect(
     page.getByRole("textbox", { name: "Article content" }).locator("img"),
@@ -191,6 +192,7 @@ test("opening an inline editor stays clean while changed content requires explic
   page,
 }) => {
   await page.goto("/#page=1");
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   const editor = page.getByRole("region", { name: "Edit page", exact: true });
   await expect(editor).toBeVisible();
@@ -209,6 +211,7 @@ test("opening an inline editor stays clean while changed content requires explic
     page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true }),
   ).toHaveCount(0);
 
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await editor.getByLabel("Title", { exact: true }).fill("Changed title");
   await expect(editor.locator(".rich-save-state")).toHaveText(
@@ -238,6 +241,7 @@ test("keeping edits during sidebar navigation preserves content and saves direct
   page,
 }) => {
   await page.goto("/#page=1");
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   const editor = page.getByRole("region", { name: "Edit page", exact: true });
   await editor
@@ -282,6 +286,7 @@ test("searching during inline editing protects unsaved content until the destina
   page,
 }) => {
   await page.goto("/#page=1");
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   const editor = page.getByRole("region", { name: "Edit page", exact: true });
   await editor

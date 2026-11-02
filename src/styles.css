@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 :root {
+  color-scheme: light;
   font-family:
     Inter,
     ui-sans-serif,
@@ -215,8 +216,11 @@ kbd {
   width: 33px;
   height: 33px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
   background: var(--blue-soft);
   color: var(--blue);
   font-size: 11px;
@@ -368,6 +372,14 @@ textarea {
 }
 input::placeholder,
 textarea::placeholder {
+  color: var(--muted);
+}
+select option,
+select optgroup {
+  background: var(--surface);
+  color: var(--ink);
+}
+select option:disabled {
   color: var(--muted);
 }
 textarea {

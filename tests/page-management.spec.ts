@@ -426,9 +426,11 @@ test("archiving protects active children and a leaf can be restored from Archive
   await expect(page.locator(".article-header .status-badge")).toHaveText(
     "Archived",
   );
+  await page.getByLabel("More page actions", { exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Edit page", exact: true }),
   ).toBeDisabled();
+  await page.getByLabel("More page actions", { exact: true }).click();
   await expect(
     page.getByLabel("Upload attachments", { exact: true }),
   ).toBeDisabled();

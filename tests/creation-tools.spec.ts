@@ -226,6 +226,7 @@ test("expand sections and status labels survive publishing, search, and Markdown
   expect(markdown).toContain(
     "Calibration evidence verified at **reference conditions**",
   );
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   const reopened = page.getByRole("textbox", {
     name: "Article content",

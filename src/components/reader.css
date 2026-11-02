@@ -33,9 +33,6 @@
   align-items: center;
   gap: 6px;
 }
-.reader-actions > .button {
-  margin-left: 5px;
-}
 .article-view .article-header h1 {
   max-width: 900px;
   margin: 0 0 12px;
@@ -204,7 +201,7 @@
 }
 .article-view .article-toc {
   padding: 0;
-  top: 96px;
+  top: 28px;
 }
 .article-view .article-toc > .eyebrow {
   font-size: 9px;
@@ -632,13 +629,19 @@
 .article-view .breadcrumbs button:hover {
   color: var(--blue);
 }
+.article-view .breadcrumbs .reader-navigation {
+  flex-shrink: 0;
+}
+.article-view .breadcrumbs .reader-navigation:hover {
+  background: var(--blue-soft);
+}
 .article-view .article-metadata {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   color: var(--muted);
 }
-.article-view .article-metadata > span {
+.article-view .article-metadata > span:not(.avatar) {
   display: flex;
   align-items: center;
   gap: 6px;

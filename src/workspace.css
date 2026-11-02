@@ -299,33 +299,11 @@
 .workspace-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex-shrink: 0;
-}
-.global-search {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 260px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-2);
-  color: var(--muted);
-  padding: 9px 11px;
-  font-size: 11px;
-}
-.global-search kbd {
-  margin-left: auto;
-  font-size: 9px;
 }
 .create-control {
   position: relative;
-}
-.create-trigger {
-  gap: 8px;
-  min-height: 36px;
-  font-size: 12px;
-  padding: 8px 13px;
 }
 .create-dropdown {
   position: absolute;
@@ -870,9 +848,6 @@
   .workspace-location > strong {
     max-width: 130px;
   }
-  .global-search {
-    width: 220px;
-  }
   .document-row time {
     display: none;
   }
@@ -939,25 +914,6 @@
     display: none;
   }
   .workspace-toolbar {
-    gap: 5px;
-  }
-  .global-search {
-    width: 34px;
-    border: 0;
-    background: none;
-    padding: 0;
-    justify-content: center;
-  }
-  .global-search > span,
-  .global-search > kbd {
-    display: none;
-  }
-  .theme-button {
-    width: 30px;
-  }
-  .create-trigger {
-    padding: 8px 10px;
-    font-size: 11px;
     gap: 5px;
   }
   .demo-notice {

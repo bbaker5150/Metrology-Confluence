@@ -427,6 +427,7 @@ test("an app-group member reads and edits an owner's page and creates a page wit
       exact: true,
     }),
   ).toBeVisible();
+  await page.getByLabel("More page actions", { exact: true }).click();
   await page.getByRole("button", { name: "Edit page", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Article content", exact: true })
@@ -437,6 +438,7 @@ test("an app-group member reads and edits an owner's page and creates a page wit
   );
   expect(fixture.records.Pages[0].AuthorId).toBe(1);
   expect(fixture.records.Pages[0].LastEditorName).toBe("App Member");
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("menuitem", { name: /^Page/ }).click();
   await page.getByLabel("Title", { exact: true }).fill("App member procedure");

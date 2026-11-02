@@ -53,11 +53,6 @@
   background: var(--surface-2);
   border-color: var(--line);
 }
-.rich-location-note {
-  font-size: 10px;
-  white-space: nowrap;
-  color: var(--muted);
-}
 .rich-document-tools {
   display: flex;
   align-items: center;
@@ -886,9 +881,6 @@
     left: auto;
     right: 15px;
   }
-  .rich-location-note {
-    display: none;
-  }
 }
 @media (max-width: 650px) {
   .rich-document-top {
@@ -1057,19 +1049,12 @@ fieldset.rich-workspace {
 .rich-page-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 20px;
   min-height: 65px;
   padding: 12px 28px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
-}
-.rich-edit-context {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--muted);
-  font-size: 12px;
 }
 .rich-page-actions-right {
   display: flex;
@@ -1134,13 +1119,6 @@ fieldset.rich-workspace {
     min-height: 59px;
     padding: 10px 14px;
     gap: 8px;
-  }
-  .rich-edit-context {
-    gap: 6px;
-    font-size: 10px;
-  }
-  .rich-edit-context svg {
-    display: none;
   }
   .rich-page-actions-right {
     gap: 5px;

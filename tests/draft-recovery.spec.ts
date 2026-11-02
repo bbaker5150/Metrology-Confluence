@@ -194,6 +194,7 @@ test("a reload restores a new draft's metadata and staged image, then publishes 
   expect(saved.pages).toHaveLength(JSON.parse(backendBefore!).pages.length + 1);
   expect(saved.attachments[String(records[0].Id)]).toHaveLength(1);
   await expect.poll(() => recoveryTitles(page)).toEqual([]);
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   const fresh = await openNewEditor(page);
   await expect(fresh.locator(".rich-recovery-status")).toHaveText(
     "Device recovery ready",

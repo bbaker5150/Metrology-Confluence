@@ -250,6 +250,7 @@ test("a member with the creator's display name can read, edit, and create pages 
   expect(fixture.original.AuthorId).toBe(7);
   expect(fixture.pageSaves).toHaveLength(1);
   expect(fixture.versionSaves).toHaveLength(1);
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("menuitem", { name: /^Page/ }).click();
   const create = page.getByRole("region", { name: "Create page", exact: true });
