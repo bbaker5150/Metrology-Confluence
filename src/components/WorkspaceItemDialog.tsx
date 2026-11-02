@@ -66,35 +66,35 @@ export default function WorkspaceItemDialog({
     setBusy(true);
     setError("");
     onBusy(true);
+    let updatedSpace: Space | undefined;
     try {
       if (action.kind === "deletePage") {
         await service.deletePage(action.page.Id);
-        onBusy(false);
-        onPageDeleted(action.page);
       } else if (action.kind === "deleteSpace") {
         await service.deleteSpace(action.space.Id);
-        onBusy(false);
-        onSpaceDeleted(action.space);
-      } else
-        onSpaceChanged(
-          await service.updateSpace(
-            action.space.Id,
-            action.kind === "rename"
-              ? { Title: value }
-              : { AccentColor: value },
-          ),
+      } else {
+        updatedSpace = await service.updateSpace(
+          action.space.Id,
+          action.kind === "rename" ? { Title: value } : { AccentColor: value },
         );
-      onClose();
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "The change could not be completed.",
       );
       setBlocked(e instanceof PageDeletionError);
+      return;
     } finally {
       pending.current = false;
       setBusy(false);
       onBusy(false);
     }
+    // The write is confirmed. Close its confirmation before refreshing or
+    // navigating; a UI callback must never invite another destructive retry.
+    onClose();
+    if (action.kind === "deletePage") onPageDeleted(action.page);
+    else if (action.kind === "deleteSpace") onSpaceDeleted(action.space);
+    else if (updatedSpace) onSpaceChanged(updatedSpace);
   }
   return (
     <Modal

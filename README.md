@@ -31,6 +31,8 @@ The top bar uses matching **Create (+)**, **Search**, and **Theme** icons in tha
 
 Use **⋯** on a space card or next to its sidebar name to rename or delete it. Sidebar menus appear on hover or keyboard focus and stay visible on touch devices. Click the colored square beside a sidebar space, or its folder square on the home card, to choose a preset or custom color. Renaming and recoloring keep the space ID, links, and page membership unchanged; changes are shared with the team.
 
+Navigation preserves the actual document URL, including SharePoint preview `blob:` URLs. If an embedded host blocks browser-history changes, navigation continues in app state; the address and browser reload may retain an earlier route. A blocked address update does not turn a confirmed save or deletion into a failure. Internal article links use the same guarded app navigation rather than reloading a temporary preview document.
+
 A space must be empty before deletion, including Draft and Archived pages. Move or delete its pages first. Space changes use your existing SharePoint list permissions; deletion moves the space item to the SharePoint recycle bin. The membership check and recycle request are separate operations, so coordinate deletion if teammates are adding pages at the same time. No branch or space cascades are performed. Local demo deletion has no undo.
 
 Page and subpage **⋯** menus offer **Edit page** to members and **Delete page** only to the original creator. Deletion rechecks the native SharePoint creator and child-page constraints before sending the request.

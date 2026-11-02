@@ -25,6 +25,7 @@ import {
 import { service } from "./services/sharepointService";
 import { savePageWithImages } from "./services/imageSave";
 import { contentText } from "./lib/content";
+import { updateRouteHash } from "./lib/navigation";
 import type { Space, Page } from "./types";
 import emblem from "./assets/metsoft-emblem.webp";
 import Modal from "./components/Modal";
@@ -251,19 +252,11 @@ export default function App() {
       const nextHash = location.hash;
       if (nextHash === currentHash.current) return;
       if (editorOpen.current || readerBusy.current) {
-        history.replaceState(
-          null,
-          "",
-          location.pathname + location.search + currentHash.current,
-        );
+        updateRouteHash(currentHash.current, "replace");
       }
       transition(() => {
         currentHash.current = nextHash;
-        history.replaceState(
-          null,
-          "",
-          location.pathname + location.search + nextHash,
-        );
+        updateRouteHash(nextHash, "replace");
         setPageId(
           Number(new URLSearchParams(nextHash.slice(1)).get("page")) || 0,
         );
@@ -294,7 +287,7 @@ export default function App() {
     setPageId(id);
     const nextHash = `#page=${id}`;
     currentHash.current = nextHash;
-    history.pushState(null, "", location.pathname + location.search + nextHash);
+    updateRouteHash(nextHash, "push");
     setSearch(false);
     setMobile(false);
     window.scrollTo({ top: 0 });
@@ -307,7 +300,7 @@ export default function App() {
       setSpaceId(id);
       setPageId(0);
       currentHash.current = "";
-      history.replaceState(null, "", location.pathname + location.search);
+      updateRouteHash("", "replace");
       window.scrollTo({ top: 0 });
     });
   const startEditor = (next: Partial<Page>) => {
@@ -459,7 +452,41 @@ export default function App() {
     </div>
   );
   return (
-    <div className={`workspace-shell ${editor ? "is-editing" : ""}`}>
+    <div
+      className={`workspace-shell ${editor ? "is-editing" : ""}`}
+      onClick={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          event.altKey ||
+          !(event.target instanceof Element)
+        )
+          return;
+        const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+        const href = anchor?.getAttribute("href");
+        if (
+          !anchor ||
+          !href?.startsWith("#") ||
+          anchor.hasAttribute("download") ||
+          (anchor.target && anchor.target !== "_self")
+        )
+          return;
+        const ids = new URLSearchParams(href.slice(1)).getAll("page");
+        if (
+          ids.length !== 1 ||
+          !/^[1-9]\d*$/.test(ids[0]) ||
+          !Number.isSafeInteger(Number(ids[0]))
+        )
+          return;
+        // Native fragment navigation can reload an opaque-origin blob frame.
+        // Article links use the same guarded state transition as tree buttons.
+        event.preventDefault();
+        navigate(Number(ids[0]));
+      }}
+    >
       <a
         className="skip-link"
         href="#main-content"

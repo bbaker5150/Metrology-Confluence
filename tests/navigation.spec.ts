@@ -57,3 +57,44 @@ test("Markdown heading links retain the article route and page links navigate", 
     }),
   ).toHaveCount(0);
 });
+
+test("a rejected history update does not bypass the hash-change unsaved-edit guard", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    History.prototype.pushState = History.prototype.replaceState = () => {
+      throw new DOMException("History blocked", "SecurityError");
+    };
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/#page=1");
+  await page.getByLabel("More page actions", { exact: true }).click();
+  await page.getByRole("button", { name: "Edit page", exact: true }).click();
+  await page
+    .getByLabel("Title", { exact: true })
+    .fill("Still editing this page");
+  await page.evaluate(() => {
+    location.hash = "page=2";
+  });
+  const confirmation = page.getByRole("dialog", {
+    name: "Discard unsaved changes?",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await confirmation
+    .getByRole("button", { name: "Keep editing", exact: true })
+    .click();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+    "Still editing this page",
+  );
+  await page.evaluate(() => {
+    location.hash = "page=3";
+  });
+  await confirmation
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
+  await expect(page.locator(".article-view")).toBeVisible();
+  await expect(page.locator(".rich-editor")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

@@ -108,6 +108,9 @@ function documentFragment(html: string) {
 export function safeContentUrl(url: string, image = false, allowBlob = false) {
   const value = url.trim();
   if (!value || /[\u0000-\u001f\u007f]/.test(value)) return "";
+  // Article/heading fragments are safe regardless of the hosting scheme.
+  // Resolving them against a blob: preview URL must not strip their href.
+  if (!image && value.startsWith("#")) return value;
   if (
     image &&
     /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value)

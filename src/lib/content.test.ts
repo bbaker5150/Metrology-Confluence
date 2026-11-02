@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   RICH_PREFIX,
   contentText,
@@ -9,9 +9,28 @@ import {
   toEditorHTML,
   toMarkdown,
   normalizeStatusLabel,
+  safeContentUrl,
 } from "./content";
 
 describe("rich article compatibility and security", () => {
+  it("preserves page and heading links in blob previews without allowing executable URLs", () => {
+    const base = vi
+      .spyOn(document, "baseURI", "get")
+      .mockReturnValue("blob:https://tenant.test/preview-id");
+    try {
+      expect(safeContentUrl("#page=12")).toBe("#page=12");
+      expect(safeContentUrl("#procedure")).toBe("#procedure");
+      expect(sanitizeContentHTML('<a href="#page=12">Reference</a>')).toContain(
+        'href="#page=12"',
+      );
+      expect(safeContentUrl("javascript:alert(1)")).toBe("");
+      expect(safeContentUrl("#page=12\n")).toBe("#page=12");
+      expect(safeContentUrl("#page=\n12")).toBe("");
+      expect(safeContentUrl("#page=12", true)).toBe("");
+    } finally {
+      base.mockRestore();
+    }
+  });
   it("keeps old Markdown editable with native task and callout structure", () => {
     const html = toEditorHTML(
       "## Procedure\n\n> [!WARNING]\n> Disconnect power.\n\n- [x] Record result\n- [ ] Review report\n\n| A | B |\n| --- | --- |\n| 1 | 2 |",
